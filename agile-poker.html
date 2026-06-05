@@ -138,6 +138,9 @@
         #reset-btn:hover { background: #444; }
         button:active { transform: scale(0.98); }
 
+        .btn-text { display: inline; }
+        .btn-icon { display: none; }
+
         /* Standard Toolkit Icons */
         .bottom-icon {
             position: fixed; bottom: 20px; font-size: 1.5rem; cursor: pointer;
@@ -194,9 +197,16 @@
             }
             #header { padding: 10px 15px; flex-wrap: wrap; gap: 10px; }
             #controls { padding: 15px; }
-            .action-bar { flex-direction: column; align-items: stretch; }
-            .name-input-group { width: 100%; }
+            .action-bar { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; gap: 10px; }
+            .name-input-group { flex: 1; min-width: 80px; }
             .name-input-group input { width: 100%; }
+            
+            #reveal-btn, #reset-btn { padding: 10px; min-width: 44px; flex-shrink: 0; }
+            .btn-text { display: none; }
+            .btn-icon { display: block; font-size: 1.2rem; }
+
+            .deck.collapsed .deck-card:not(.selected) { display: none; }
+            .deck.collapsed { justify-content: center; }
             
             /* Move dev icons to a safer place on mobile */
             .desktop-only-icon { display: none; }
@@ -241,11 +251,17 @@
         <div class="deck" id="deck"></div>
         <div class="action-bar">
             <div class="name-input-group">
-                <span style="font-size: 0.7rem; opacity: 0.5;">PLAYER</span>
-                <input type="text" id="player-name" maxlength="15" onchange="updateMyName()" placeholder="Your name...">
+                <span style="font-size: 0.7rem; opacity: 0.5;">NAME</span>
+                <input type="text" id="player-name" maxlength="15" oninput="updateMyName()" placeholder="Your name...">
             </div>
-            <button id="reveal-btn" onclick="requestReveal()">Reveal All</button>
-            <button id="reset-btn" onclick="requestReset()">New Round</button>
+            <button id="reveal-btn" onclick="requestReveal()" title="Reveal All">
+                <span class="btn-text">Reveal All</span>
+                <span class="btn-icon">👁️</span>
+            </button>
+            <button id="reset-btn" onclick="requestReset()" title="New Round">
+                <span class="btn-text">New Round</span>
+                <span class="btn-icon">🔄</span>
+            </button>
         </div>
     </div>
 
@@ -403,10 +419,26 @@
 
         function castVote(val) {
             if (isRevealed) return;
+            
+            const deck = document.getElementById('deck');
+            
+            // If tapping the already selected card on mobile, expand the deck
+            if (val === myVote && deck.classList.contains('collapsed')) {
+                deck.classList.remove('collapsed');
+                return;
+            }
+
             myVote = val;
+            
             document.querySelectorAll('.deck-card').forEach(c => {
                 c.classList.toggle('selected', c.innerText === val);
             });
+            
+            // Mobile collapse logic
+            if (window.innerWidth <= 768) {
+                deck.classList.add('collapsed');
+            }
+            
             broadcast({ type: 'vote', vote: val });
             updateTable();
         }
@@ -427,6 +459,10 @@
         function resetLocal() {
             myVote = null;
             isRevealed = false;
+            
+            // Restore deck for mobile
+            document.getElementById('deck').classList.remove('collapsed');
+            
             // Note: Keep participants names, just clear votes/revealed
             Object.values(participants).forEach(p => {
                 p.vote = null;
@@ -538,7 +574,12 @@ A peer-to-peer Agile Poker tool that allows distributed teams to estimate tasks 
 - **Fibonacci Deck**: 0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, ?, ☕.
 - **Auto-Join**: Share the URL with the hash to join the same room.
 - **QR Code Support**: Generate a QR code via an icon in the header to easily invite mobile users.
-- **Mobile Responsive**: Adaptive layout for phone and tablet screens.
+- **Mobile Optimized**: 
+    - Adaptive layout for phone and tablet screens.
+    - Icon-only action buttons on mobile to save space.
+    - "Collapsed" deck view after selecting a card on mobile.
+    - Tapping a selected card on mobile expands the deck for reselection.
+    - Live name updates (broadcast on every keystroke).
 - **Privacy**: No data is stored on a server; votes are sent directly between browsers.
 - **Host-Client Model**: Discovery via a shared room ID in the URL.
 - **Thai Classic Names**: Random default names for participants.
