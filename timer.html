@@ -253,11 +253,11 @@
     <!-- Developer Menu -->
     <div id="dev-menu">
         <div class="dev-label">Developer Options</div>
-        <a href="https://github.com/scalopus/scalopus.github.io/blob/main/src/timer.html" target="_blank" class="dev-item">
+        <a href="https://github.com/scalopus/scalopus.github.io/blob/main/timer.html" target="_blank" class="dev-item">
             <span>📂</span> View Source Code
         </a>
-        <button class="dev-item" onclick="copyAIMarkdown()">
-            <span>🤖</span> AI Markdown (Replicate)
+        <button class="dev-item" onclick="copyAIPrompt()">
+            <span>🤖</span> AI Prompt of this application
         </button>
         
         <div class="dev-label">Tool Information</div>
@@ -374,12 +374,15 @@
             devMenu.classList.toggle('active');
         }
 
-        function copyAIMarkdown() {
-            const htmlContent = document.documentElement.outerHTML;
-            const markdown = "```html\n" + htmlContent + "\n```";
+        function copyAIPrompt() {
+            const prompt = `Create a single-file HTML countdown timer application with a full-screen black background. 
+Include a large central timer display (tabular-nums), a control bar at the bottom with quick-set buttons (+30s, +1m, +2m, +5m, +10m), and a manual MM:SS input field. 
+Features should include a 'Reset' button, a toggleable 'Last 10s Cue' (visual pulse), and a toggleable 'Ending Sound' (3 beeps using Web Audio API). 
+Add a developer menu in the bottom-right and a home link in the bottom-left. 
+The design should be minimal and high-contrast (white text on black).`;
             
-            navigator.clipboard.writeText(markdown).then(() => {
-                alert("AI Replicate Markdown copied to clipboard!");
+            navigator.clipboard.writeText(prompt).then(() => {
+                alert("AI Prompt copied to clipboard!");
                 toggleDevMenu();
             }).catch(err => {
                 console.error('Could not copy text: ', err);
