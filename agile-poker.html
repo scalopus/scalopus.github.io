@@ -42,6 +42,15 @@
             letter-spacing: 0.5px; cursor: pointer;
         }
 
+        .name-input-group {
+            display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1);
+            padding: 4px 10px; border-radius: 6px; border: 1px solid #333;
+        }
+        .name-input-group input {
+            background: transparent; border: none; color: white; font-size: 0.85rem;
+            outline: none; width: 120px;
+        }
+
         #table {
             flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 25px; padding: 40px; justify-items: center; align-items: center;
@@ -125,7 +134,9 @@
 <body>
 
     <div id="header">
-        <div style="font-weight: 700; letter-spacing: 1px; font-size: 1.1rem;">AGILE POKER</div>
+        <div style="font-weight: 700; letter-spacing: 1px; font-size: 1.1rem; display: flex; align-items: center; gap: 15px;">
+            AGILE POKER
+        </div>
         <div id="room-info" class="room-badge" onclick="copyRoomLink()" title="Click to copy link">Connecting...</div>
     </div>
 
@@ -136,6 +147,10 @@
     <div id="controls">
         <div class="deck" id="deck"></div>
         <div class="action-bar">
+            <div class="name-input-group">
+                <span style="font-size: 0.7rem; opacity: 0.5;">PLAYER</span>
+                <input type="text" id="player-name" maxlength="15" onchange="updateMyName()" placeholder="Your name...">
+            </div>
             <button id="reveal-btn" onclick="requestReveal()">Reveal All</button>
             <button id="reset-btn" onclick="requestReset()">New Round</button>
         </div>
@@ -159,19 +174,24 @@
 
     <script>
         const deckValues = ['0', '1', '2', '3', '5', '8', '13', '21', '34', '55', '89', '?', '☕'];
+        const thaiNames = ['Somsak', 'Somchai', 'Boonmee', 'Prayut', 'Somsree', 'Mali', 'Kanya', 'Anong', 'Bua', 'Chaba', 'Daeng', 'Dam', 'Kittisak', 'Narong', 'Preecha', 'Sombat', 'Thawan', 'Ubon', 'Vichai', 'Wanchai'];
+        
         let myId = null;
+        let myName = localStorage.getItem('agilePokerName') || thaiNames[Math.floor(Math.random() * thaiNames.length)];
         let peer = null;
         let connections = {}; // peerId -> connection
         let participants = {}; // peerId -> { name, vote, revealed }
         let myVote = null;
         let isRevealed = false;
+        let isHost = false;
 
-        // Get or Create Room ID
         const roomId = window.location.hash.substring(1) || Math.random().toString(36).substring(2, 8);
         window.location.hash = roomId;
+        const hostId = `scalopus-room-${roomId}-host`;
 
         function init() {
-            // Setup Deck
+            document.getElementById('player-name').value = myName;
+            
             const deck = document.getElementById('deck');
             deckValues.forEach(val => {
                 const card = document.createElement('div');
@@ -181,25 +201,64 @@
                 deck.appendChild(card);
             });
 
-            // Initialize PeerJS
-            peer = new Peer(`scalopus-${roomId}-${Math.random().toString(36).substring(2, 5)}`);
+            startPeer(hostId);
+        }
+
+        function updateMyName() {
+            myName = document.getElementById('player-name').value.trim() || 'Anonymous';
+            localStorage.setItem('agilePokerName', myName);
+            broadcast({ type: 'name-update', name: myName });
+            updateTable();
+        }
+
+        function startPeer(requestedId) {
+            peer = new Peer(requestedId);
             
             peer.on('open', (id) => {
                 myId = id;
-                document.getElementById('room-info').innerText = `ROOM: ${roomId}`;
+                isHost = (id === hostId);
+                document.getElementById('room-info').innerText = `ROOM: ${roomId} (${isHost ? 'Host' : 'Client'})`;
+                
+                if (!isHost) {
+                    connectToHost();
+                }
             });
 
             peer.on('connection', (conn) => {
                 setupConnection(conn);
             });
+
+            peer.on('error', (err) => {
+                if (err.type === 'unavailable-id' && requestedId === hostId) {
+                    console.log("Host ID taken, joining as client...");
+                    startPeer(null);
+                } else {
+                    console.error("Peer Error:", err);
+                }
+            });
+        }
+
+        function connectToHost() {
+            const conn = peer.connect(hostId);
+            setupConnection(conn);
         }
 
         function setupConnection(conn) {
             conn.on('open', () => {
                 connections[conn.peer] = conn;
-                conn.send({ type: 'init', vote: myVote, revealed: isRevealed });
+                conn.send({ type: 'init', fromId: myId, name: myName, vote: myVote, revealed: isRevealed });
             });
-            conn.on('data', (data) => handleMessage(conn.peer, data));
+
+            conn.on('data', (data) => {
+                const senderId = data.fromId || conn.peer;
+                handleMessage(senderId, data);
+                if (isHost && !data._relayed && data.type !== 'init') {
+                    data._relayed = true;
+                    data.fromId = senderId;
+                    relayMessage(conn.peer, data);
+                }
+            });
+
             conn.on('close', () => {
                 delete connections[conn.peer];
                 delete participants[conn.peer];
@@ -207,9 +266,23 @@
             });
         }
 
+        function relayMessage(excludeId, data) {
+            Object.entries(connections).forEach(([peerId, conn]) => {
+                if (peerId !== excludeId) {
+                    conn.send(data);
+                }
+            });
+        }
+
         function handleMessage(fromId, data) {
-            if (data.type === 'init' || data.type === 'vote') {
-                participants[fromId] = { vote: data.vote, revealed: data.revealed || isRevealed };
+            if (fromId === myId) return;
+
+            if (data.type === 'init') {
+                participants[fromId] = { name: data.name, vote: data.vote, revealed: data.revealed || isRevealed };
+            } else if (data.type === 'vote') {
+                participants[fromId] = { ...participants[fromId], vote: data.vote, revealed: data.revealed || isRevealed };
+            } else if (data.type === 'name-update') {
+                if (participants[fromId]) participants[fromId].name = data.name;
             } else if (data.type === 'reveal') {
                 isRevealed = true;
                 Object.values(participants).forEach(p => p.revealed = true);
@@ -220,6 +293,7 @@
         }
 
         function broadcast(msg) {
+            msg.fromId = myId;
             Object.values(connections).forEach(conn => conn.send(msg));
         }
 
@@ -235,6 +309,7 @@
 
         function requestReveal() {
             isRevealed = true;
+            Object.values(participants).forEach(p => p.revealed = true);
             broadcast({ type: 'reveal' });
             updateTable();
         }
@@ -242,12 +317,17 @@
         function requestReset() {
             resetLocal();
             broadcast({ type: 'reset' });
+            updateTable();
         }
 
         function resetLocal() {
             myVote = null;
             isRevealed = false;
-            participants = {};
+            // Note: Keep participants names, just clear votes/revealed
+            Object.values(participants).forEach(p => {
+                p.vote = null;
+                p.revealed = false;
+            });
             document.querySelectorAll('.deck-card').forEach(c => c.classList.remove('selected'));
             updateTable();
         }
@@ -255,13 +335,10 @@
         function updateTable() {
             const table = document.getElementById('table');
             table.innerHTML = '';
-
-            // Add Me
-            addCardToTable('You (Me)', myVote, isRevealed);
-
-            // Add Others
+            addCardToTable(`${myName} (You)`, myVote, isRevealed);
             Object.entries(participants).forEach(([id, p]) => {
-                addCardToTable(`Player ${id.split('-').pop()}`, p.vote, p.revealed);
+                const displayName = p.name || `Player ${id.substring(id.length - 4)}`;
+                addCardToTable(displayName, p.vote, p.revealed);
             });
         }
 
@@ -290,7 +367,7 @@
         function toggleDevMenu() { document.getElementById('dev-menu').classList.toggle('active'); }
 
         function copyAIPrompt() {
-            const prompt = `Create a P2P Agile Poker tool using PeerJS. Include a Fibonacci deck, a participant grid with 3D card flip animations, and "Reveal/Reset" buttons synchronized across all connected browsers via WebRTC data channels.`;
+            const prompt = `Create a P2P Agile Poker tool using PeerJS with a Host-Client model for discovery. First user becomes the host, subsequent users connect to the host. Host relays votes and reveal/reset commands to all peers.`;
             navigator.clipboard.writeText(prompt);
             alert("Prompt copied!");
         }
