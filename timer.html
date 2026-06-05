@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Countdown Timer | Scalopus</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #0070f3;
+            --control-bg: rgba(255, 255, 255, 0.1);
+            --danger-color: #ff4d4d;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #timer-display {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 25vw;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            user-select: none;
+            transition: color 0.3s ease;
+        }
+
+        #timer-display.last-seconds {
+            color: var(--danger-color);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        #controls {
+            padding: 20px;
+            background: var(--control-bg);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #444;
+        }
+
+        button:active {
+            background: var(--accent-color);
+        }
+
+        .quick-set-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .options-group {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9rem;
+            align-items: center;
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+
+        #reset-btn {
+            background: var(--danger-color);
+        }
+
+        #reset-btn:hover {
+            background: #e60000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="timer-display">00:00</div>
+
+    <div id="controls">
+        <div class="quick-set-group">
+            <button onclick="addMinutes(1)">+1m</button>
+            <button onclick="addMinutes(2)">+2m</button>
+            <button onclick="addMinutes(5)">+5m</button>
+            <button onclick="addMinutes(10)">+10m</button>
+        </div>
+        
+        <button id="reset-btn" onclick="resetTimer()">Reset</button>
+
+        <div class="options-group">
+            <label>
+                <input type="checkbox" id="last-10s-check" checked>
+                Last 10s Cue
+            </label>
+            <label>
+                <input type="checkbox" id="sound-check" checked>
+                Ending Sound
+            </label>
+        </div>
+    </div>
+
+    <script>
+        let timeLeft = 0;
+        let timerInterval = null;
+        const display = document.getElementById('timer-display');
+        const last10sCheck = document.getElementById('last-10s-check');
+        const soundCheck = document.getElementById('sound-check');
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playBeep() {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 1);
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateDisplay() {
+            display.textContent = formatTime(timeLeft);
+            
+            if (timeLeft <= 10 && timeLeft > 0 && last10sCheck.checked) {
+                display.classList.add('last-seconds');
+            } else {
+                display.classList.remove('last-seconds');
+            }
+        }
+
+        function addMinutes(m) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            timeLeft += m * 60;
+            updateDisplay();
+            startTimer();
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timeLeft = 0;
+            updateDisplay();
+        }
+
+        function startTimer() {
+            if (timerInterval) return;
+            
+            timerInterval = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    updateDisplay();
+                    
+                    if (timeLeft === 0) {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        if (soundCheck.checked) {
+                            playBeep();
+                        }
+                    }
+                } else {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+            }, 1000);
+        }
+
+        updateDisplay();
+    </script>
+</body>
+</html>
