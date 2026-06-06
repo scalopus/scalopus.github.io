@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wheel of Luck - Scalopus</title>
+    <style>
+        :root {
+            --bg-color: #020617;
+            --trek-gold: #fde047;
+            --trek-blue: #38bdf8;
+            --trek-red: #ef4444;
+            --trek-red-dark: #991b1b;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Starfield Background */
+        #starfield {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: moveStar linear infinite;
+        }
+
+        @keyframes moveStar {
+            from { transform: translateY(0); }
+            to { transform: translateY(100vh); }
+        }
+
+        /* Main Stage */
+        #stage {
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding-bottom: 120px;
+            z-index: 1;
+        }
+
+        #reel-container {
+            width: 90%;
+            max-width: 1200px;
+            height: 300px; /* Mobile height */
+            background: rgba(2, 6, 23, 0.95);
+            border: 4px solid var(--trek-blue);
+            border-radius: 15px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(56, 189, 248, 0.3), inset 0 0 50px rgba(0,0,0,1);
+            backdrop-filter: blur(10px);
+        }
+
+        @media (min-width: 768px) {
+            #reel-container { height: 400px; }
+        }
+
+        #reel-viewport {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            will-change: transform;
+        }
+
+        .reel-item {
+            position: absolute;
+            width: 100%;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem; /* Mobile font */
+            font-weight: bold;
+            color: var(--text-dim);
+            transition: color 0.15s, font-size 0.15s, opacity 0.15s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 0 1rem;
+            box-sizing: border-box;
+            opacity: 0.4;
+        }
+
+        @media (min-width: 768px) {
+            .reel-item { font-size: 2.5rem; }
+        }
+
+        .reel-item.active {
+            color: var(--trek-gold);
+            font-size: 2.2rem; /* Mobile active font */
+            text-shadow: 0 0 25px rgba(253, 224, 71, 0.8);
+            opacity: 1;
+        }
+
+        @media (min-width: 768px) {
+            .reel-item.active { font-size: 3.5rem; }
+        }
+
+        #selection-marker {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 110px;
+            margin-top: -55px;
+            border-top: 3px solid var(--trek-gold);
+            border-bottom: 3px solid var(--trek-gold);
+            background: rgba(253, 224, 71, 0.1);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Engage Button */
+        .arcade-btn-container {
+            margin-top: 2rem;
+        }
+
+        .arcade-btn {
+            width: 100px;
+            height: 100px;
+            background: var(--trek-red);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 0 20px var(--trek-red), 0 8px 0 var(--trek-red-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 1.2rem;
+            color: white;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            user-select: none;
+            animation: pulse-glow 2.5s infinite;
+        }
+
+        @media (min-width: 768px) {
+            .arcade-btn { width: 130px; height: 130px; font-size: 1.5rem; }
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 20px var(--trek-red), 0 8px 0 var(--trek-red-dark); transform: scale(1); }
+            50% { box-shadow: 0 0 50px var(--trek-red), 0 8px 0 var(--trek-red-dark); transform: scale(1.05); }
+            100% { box-shadow: 0 0 20px var(--trek-red), 0 8px 0 var(--trek-red-dark); transform: scale(1); }
+        }
+
+        .arcade-btn:active {
+            transform: translateY(4px) scale(0.95);
+            box-shadow: 0 0 15px var(--trek-red), 0 4px 0 var(--trek-red-dark);
+            animation: none;
+        }
+
+        .arcade-btn:disabled {
+            background: #475569;
+            box-shadow: none;
+            cursor: not-allowed;
+            opacity: 0.5;
+            animation: none;
+        }
+
+        /* Control Panel Bar */
+        #bottom-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--trek-blue);
+            border-radius: 50px;
+            padding: 0.5rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.2);
+            z-index: 100;
+            white-space: nowrap;
+            width: 90%;
+            max-width: 500px;
+            justify-content: center;
+        }
+
+        @media (min-width: 768px) {
+            #bottom-panel { padding: 0.75rem 2rem; gap: 1rem; width: auto; }
+        }
+
+        .panel-btn {
+            background: none;
+            border: 1px solid var(--trek-blue);
+            color: var(--trek-blue);
+            padding: 0.4rem 0.8rem;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            font-size: 0.75rem;
+        }
+
+        @media (min-width: 768px) {
+            .panel-btn { padding: 0.6rem 1.4rem; font-size: 0.85rem; }
+        }
+
+        .panel-btn:hover {
+            background: var(--trek-blue);
+            color: white;
+            box-shadow: 0 0 15px var(--trek-blue);
+        }
+
+        select {
+            background: #020617;
+            border: 1px solid var(--trek-blue);
+            color: white;
+            padding: 0.3rem 0.5rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            outline: none;
+            max-width: 100px;
+        }
+
+        @media (min-width: 768px) {
+            select { padding: 0.5rem 1.2rem; font-size: 0.85rem; max-width: none; }
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            padding: 1.5rem;
+            border-radius: 20px;
+            border: 2px solid var(--trek-blue);
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 0 50px rgba(56, 189, 248, 0.4);
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: #020617;
+            border: 1px solid var(--trek-blue);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            resize: none;
+            font-family: monospace;
+            box-sizing: border-box;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            background: #020617;
+            border: 1px solid var(--trek-blue);
+            color: white;
+            padding: 0.75rem;
+            border-radius: 10px;
+            box-sizing: border-box;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        /* Utilities */
+        .bottom-icon {
+            position: fixed;
+            bottom: 25px;
+            width: 36px;
+            height: 36px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--trek-blue);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem; text-decoration: none; color: white;
+            z-index: 1000;
+        }
+
+        @media (min-width: 768px) {
+            .bottom-icon { width: 44px; height: 44px; font-size: 1.2rem; bottom: 35px; }
+        }
+
+        #home-link { left: 10px; }
+        #dev-btn { right: 10px; }
+
+        @media (min-width: 768px) {
+            #home-link { left: 30px; }
+            #dev-btn { right: 30px; }
+        }
+
+        #dev-menu {
+            position: fixed;
+            bottom: 75px; right: 10px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--trek-blue);
+            border-radius: 1rem; padding: 1rem;
+            display: none; flex-direction: column; gap: 0.5rem;
+            z-index: 1000; min-width: 180px; backdrop-filter: blur(15px);
+        }
+
+        @media (min-width: 768px) {
+            #dev-menu { bottom: 90px; right: 30px; min-width: 200px; }
+        }
+
+        .dev-item {
+            color: var(--text-main); text-decoration: none;
+            padding: 0.6rem; border-radius: 8px; display: block; font-size: 0.85rem;
+            background: none; border: none; width: 100%; text-align: left; cursor: pointer;
+        }
+        .dev-item:hover { background: rgba(56, 189, 248, 0.2); }
+
+        #confetti-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <div id="starfield"></div>
+    <canvas id="confetti-canvas"></canvas>
+
+    <div id="stage">
+        <div id="reel-container">
+            <div id="selection-marker"></div>
+            <div id="reel-viewport"></div>
+        </div>
+
+        <div class="arcade-btn-container">
+            <button id="start-btn" class="arcade-btn" onclick="startRolling()">ENGAGE</button>
+        </div>
+    </div>
+
+    <div id="bottom-panel">
+        <button class="panel-btn" onclick="openModal()">📝 Edit List</button>
+        <select id="preset-dropdown" onchange="loadSelectedPreset()">
+            <option value="">-- Presets --</option>
+        </select>
+        <button class="panel-btn" style="border-color: var(--trek-red); color: var(--trek-red);" onclick="deleteSelectedPreset()">🗑️</button>
+        <label style="font-size: 0.75rem; cursor: pointer; color: var(--trek-blue); display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" id="sound-toggle" checked> Audio
+        </label>
+    </div>
+
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top: 0; color: var(--trek-blue);">Update Database</h3>
+            <textarea id="name-input" placeholder="Enter names (one per line)...">Alice
+Bob
+Charlie
+Diana
+Eve
+Frank
+Grace
+Heidi</textarea>
+            <input type="text" id="new-preset-name" placeholder="Save as new preset designation...">
+            <div style="display: flex; gap: 1rem;">
+                <button class="panel-btn" style="flex: 1" onclick="saveNewPreset()">💾 Save Preset</button>
+                <button class="panel-btn" style="flex: 1; background: var(--trek-blue); color: white;" onclick="closeModal()">⚡ Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <a href="index.html" id="home-link" class="bottom-icon">🏠</a>
+    <button id="dev-btn" class="bottom-icon" onclick="toggleDevMenu()">🛠️</button>
+
+    <div id="dev-menu">
+        <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Console Access</div>
+        <div style="font-size: 0.7rem; color: var(--trek-blue); margin-bottom: 0.5rem; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 0.5rem;">
+            v1.0.0 | 2026-06-06<br>
+            Gemini 3 Flash Preview
+        </div>
+        <a href="https://github.com/scalopus/scalopus.github.io/blob/main/src/wheel-of-luck.html" target="_blank" class="dev-item">📂 View Source Code</a>
+        <button class="dev-item" onclick="copyAIPrompt()">🤖 Copy AI Prompt</button>
+    </div>
+
+    <script>
+        function initStars() {
+            const field = document.getElementById('starfield');
+            for (let i = 0; i < 450; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const size = Math.random() * 2.5;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.left = Math.random() * 100 + 'vw';
+                star.style.top = Math.random() * 100 + 'vh';
+                star.style.animationDuration = (Math.random() * 15 + 5) + 's';
+                star.style.animationDelay = (Math.random() * 5) + 's';
+                field.appendChild(star);
+            }
+        }
+
+        let audioCtx = null;
+        function playSound(type) {
+            if (!document.getElementById('sound-toggle').checked) return;
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (type === 'tick') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(350, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+            } else if (type === 'win') {
+                const now = audioCtx.currentTime;
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.6);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                osc.start(); osc.stop(now + 1.2);
+            }
+        }
+
+        const viewport = document.getElementById('reel-viewport');
+        const ITEM_HEIGHT = 100;
+        let rolling = false;
+
+        function getCenterOffset() {
+            const containerHeight = document.getElementById('reel-container').clientHeight;
+            return (containerHeight / 2) - (ITEM_HEIGHT / 2);
+        }
+
+        function initReel() {
+            viewport.innerHTML = '';
+            addReelItem("วงแหวนชะตาลิขิต", 0);
+            updateReelY(getCenterOffset());
+            if (viewport.children[0]) viewport.children[0].classList.add('active');
+        }
+
+        function addReelItem(name, index) {
+            const div = document.createElement('div');
+            div.className = 'reel-item';
+            div.innerText = name;
+            div.style.top = (index * ITEM_HEIGHT) + 'px';
+            viewport.appendChild(div);
+        }
+
+        function updateReelY(y) {
+            viewport.style.transform = `translateY(${y}px)`;
+        }
+
+        function startRolling() {
+            if (rolling) return;
+            const names = document.getElementById('name-input').value.split('\n').filter(n => n.trim() !== '');
+            if (names.length < 1) return alert('Database empty.');
+
+            rolling = true;
+            document.getElementById('start-btn').disabled = true;
+
+            const duration = 10000;
+            const start = performance.now();
+            
+            viewport.innerHTML = '';
+            const spins = 15;
+            const totalItemsCount = (spins * names.length) + names.length; 
+            for (let i = 0; i < totalItemsCount + 10; i++) {
+                addReelItem(names[i % names.length], i);
+            }
+
+            const winnerIdx = Math.floor(Math.random() * names.length);
+            const targetIdx = totalItemsCount - names.length + winnerIdx;
+            const startY = getCenterOffset();
+            const targetY = startY - (targetIdx * ITEM_HEIGHT);
+
+            let lastItemHit = -1;
+
+            function animate(now) {
+                const elapsed = now - start;
+                const progress = Math.min(elapsed / duration, 1);
+                const t = 1 - Math.pow(1 - progress, 5);
+                const currentY = startY + (targetY - startY) * t;
+
+                updateReelY(currentY);
+
+                const currentItemIdx = Math.round((getCenterOffset() - currentY) / ITEM_HEIGHT);
+                if (currentItemIdx !== lastItemHit) {
+                    if (currentItemIdx >= 0 && currentItemIdx < viewport.children.length) {
+                        const items = viewport.children;
+                        if (lastItemHit >= 0 && items[lastItemHit]) items[lastItemHit].classList.remove('active');
+                        if (items[currentItemIdx]) items[currentItemIdx].classList.add('active');
+                        playSound('tick');
+                    }
+                    lastItemHit = currentItemIdx;
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    finalize();
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function finalize() {
+            rolling = false;
+            document.getElementById('start-btn').disabled = false;
+            playSound('win');
+            startConfetti();
+        }
+
+        function openModal() { document.getElementById('edit-modal').style.display = 'flex'; }
+        function closeModal() { document.getElementById('edit-modal').style.display = 'none'; initReel(); }
+
+        function saveNewPreset() {
+            const name = document.getElementById('new-preset-name').value.trim();
+            if (!name) return alert('Enter a name');
+            const presets = JSON.parse(localStorage.getItem('luck_presets') || '{}');
+            presets[name] = document.getElementById('name-input').value;
+            localStorage.setItem('luck_presets', JSON.stringify(presets));
+            document.getElementById('new-preset-name').value = '';
+            renderPresets();
+        }
+
+        function renderPresets() {
+            const presets = JSON.parse(localStorage.getItem('luck_presets') || '{}');
+            const dropdown = document.getElementById('preset-dropdown');
+            dropdown.innerHTML = '<option value="">-- Presets --</option>';
+            Object.keys(presets).forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n; opt.textContent = n;
+                dropdown.appendChild(opt);
+            });
+        }
+
+        function loadSelectedPreset() {
+            const name = document.getElementById('preset-dropdown').value;
+            if (!name) return;
+            const presets = JSON.parse(localStorage.getItem('luck_presets') || '{}');
+            document.getElementById('name-input').value = presets[name];
+            initReel();
+        }
+
+        function deleteSelectedPreset() {
+            const name = document.getElementById('preset-dropdown').value;
+            if (!name) return;
+            const presets = JSON.parse(localStorage.getItem('luck_presets') || '{}');
+            delete presets[name];
+            localStorage.setItem('luck_presets', JSON.stringify(presets));
+            renderPresets();
+        }
+
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        function startConfetti() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            particles = [];
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width, y: Math.random() * canvas.height - 20,
+                    size: Math.random() * 6 + 2, color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+                    speed: Math.random() * 4 + 2, angle: Math.random() * 6.28
+                });
+            }
+            animateConfetti();
+        }
+        function animateConfetti() {
+            if (particles.length === 0) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, i) => {
+                p.y += p.speed; p.x += Math.sin(p.angle) * 2;
+                ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size);
+                if (p.y > canvas.height) particles.splice(i, 1);
+            });
+            if (particles.length > 0) requestAnimationFrame(animateConfetti);
+        }
+
+        function toggleDevMenu() {
+            const menu = document.getElementById('dev-menu');
+            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function copyAIPrompt() {
+            const prompt = `Create a single-page HTML random picker with a Star Trek (LCARS) space theme.
+Features:
+- Title: "วงแหวนชะตาลิขิต" displayed in center marker initially.
+- Viewport: Wide immersive stage filling 80-90% of screen.
+- Animation: 10s suspense reel (Fast to Slow) using Quintic Easing Out.
+- Marker: Gold horizontal lines highlighting the winner.
+- Support: Long names up to 30 characters with responsive scaling.
+- Control: Floating pill-shaped bottom bar for Edit/Presets/Audio.
+- Background: Dynamic starfield with 450 moving stars.
+- Sound: Synthetic computer ticks and victory fanfare.
+- Storage: LocalStorage for personnel list presets.
+- Mobile: Fully responsive design with dynamic centering logic.`;
+            navigator.clipboard.writeText(prompt);
+            alert('Mission parameters copied to console!');
+        }
+
+        initStars();
+        initReel();
+        renderPresets();
+        window.addEventListener('resize', () => { 
+            if(canvas) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+            if(!rolling) updateReelY(getCenterOffset());
+        });
+    </script>
+</body>
+</html>
