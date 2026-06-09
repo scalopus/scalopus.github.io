@@ -1,383 +1,196 @@
+<!--
+    Application: Claude API Usage
+    Version: 1.0.0
+    Created: 2026-06-09
+    Model: Claude Sonnet 4.6
+    Description: Visualize Claude API token usage from a CSV export — cost, token breakdown, cache hit rate, by key and model.
+    Specification: specs/claude-usage-spec.md
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude API Usage Tool</title>
+<title>Claude API Usage | Scalopus</title>
 <style>
-:root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --surface2: #21242f;
-  --border: #2e3240;
-  --text: #e2e4ec;
-  --muted: #7a7f93;
-  --opus: #c084fc;
-  --sonnet: #60a5fa;
-  --haiku: #34d399;
-  --other: #94a3b8;
-  --bar-bg: #2e3240;
-  --bar-fill: #6c8cff;
-  --gold: #ffe08a;
-  --cost: #fb923c;
+:root{
+    --bg:#0f1117;
+    --surface:#1a1d27;
+    --surface2:#21242f;
+    --border:#2e3240;
+    --text:#e2e4ec;
+    --muted:#7a7f93;
+    --opus:#c084fc;
+    --sonnet:#60a5fa;
+    --haiku:#34d399;
+    --other:#94a3b8;
+    --bar-bg:#2e3240;
+    --bar-fill:#6c8cff;
+    --gold:#ffe08a;
+    --cost:#fb923c;
+    --dev-bg:#1a1d27;
+    --dev-text:#ffffff;
 }
+*,:before,:after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif;font-size:14px;line-height:1.5}
+#drop-zone{flex-direction:column;justify-content:center;align-items:center;min-height:100vh;padding:40px;display:flex}
+.drop-card{background:var(--surface);border:2px dashed var(--border);cursor:pointer;text-align:center;border-radius:16px;width:100%;max-width:460px;padding:56px 40px 48px;transition:border-color .15s,background .15s}
+.drop-card.drag-over,.drop-card:hover{background:var(--surface2);border-color:var(--bar-fill)}
+.drop-icon{color:var(--muted);margin-bottom:18px}
+.drop-title{margin-bottom:8px;font-size:18px;font-weight:600}
+.drop-hint{color:var(--muted);font-size:13px}
+.drop-hint strong{color:var(--bar-fill);cursor:pointer}
+.drop-hint strong:hover{text-decoration:underline}
+.drop-meta{color:var(--muted);opacity:.6;margin-top:20px;font-size:11px}
+#file-input{display:none}
+#drop-zone.minimized{border-bottom:1px solid var(--border);background:var(--surface);min-height:0;padding:0}
+#drop-zone.minimized .drop-card{text-align:left;background:0 0;border:none;border-radius:0;flex-direction:row;align-items:center;gap:10px;max-width:none;padding:10px 20px;display:flex}
+#drop-zone.minimized .drop-card:hover,#drop-zone.minimized .drop-card.drag-over{background:var(--surface2);border-color:#0000}
+#drop-zone.minimized .drop-icon{flex-shrink:0;margin-bottom:0}
+#drop-zone.minimized .drop-icon svg{width:16px;height:16px}
+#drop-zone.minimized .drop-title{white-space:nowrap;text-overflow:ellipsis;max-width:320px;margin-bottom:0;font-size:12px;font-weight:600;overflow:hidden}
+#drop-zone.minimized .drop-hint{font-size:11px}
+#drop-zone.minimized .drop-meta{display:none}
+#report{max-width:1500px;margin:0 auto;padding:28px 24px 80px}
+.report-header{flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:22px;display:flex}
+.report-header h1{margin-bottom:3px;font-size:21px;font-weight:600}
+.report-header p{color:var(--muted);font-size:12px}
+.btn-reset{background:var(--surface);border:1px solid var(--border);color:var(--muted);cursor:pointer;border-radius:8px;flex-shrink:0;padding:7px 14px;font-size:12px;font-weight:600;transition:background .1s,color .1s}
+.btn-reset:hover{background:var(--surface2);color:var(--text)}
+.date-filter{background:var(--surface);border:1px solid var(--border);border-radius:12px;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:20px;padding:10px 14px;display:flex}
+.filter-label{color:var(--muted);letter-spacing:.07em;text-transform:uppercase;margin-right:2px;font-size:10px;font-weight:700}
+.period-btns{gap:3px;display:flex}
+.btn-period{color:var(--muted);cursor:pointer;background:0 0;border:1px solid #0000;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:600;transition:background .1s,color .1s,border-color .1s}
+.btn-period:hover{background:var(--surface2);color:var(--text)}
+.btn-period.active{background:var(--surface2);color:var(--text);border-color:#4a5180}
+.key-search{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;outline:none;width:200px;margin-left:auto;padding:5px 10px;font-size:12px}
+.key-search::placeholder{color:var(--muted)}
+.key-search:focus{border-color:#4a5180}
+.date-nav{align-items:center;gap:8px;display:flex}
+.btn-nav{background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;transition:background .1s}
+.btn-nav:hover{background:#2a2e40}
+#period-label{text-align:center;min-width:170px;font-size:13px;font-weight:600}
+.summary-grid{grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;margin-bottom:22px;display:grid}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px 15px}
+.card .label{color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px;font-size:10px;font-weight:700}
+.card .value{font-size:19px;font-weight:700}
+.card.hl-cost{border-color:#fb923c4d}
+.card.hl-cost .value{color:var(--cost)}
+.card.hl-tok .value{color:var(--gold)}
+.tabs{flex-wrap:wrap;gap:4px;margin-bottom:10px;display:flex}
+.tab{background:var(--surface);border:1px solid var(--border);color:var(--muted);cursor:pointer;border-radius:8px;align-items:center;gap:7px;padding:6px 13px;font-size:12px;font-weight:600;transition:background .12s,color .12s,border-color .12s;display:flex}
+.tab:hover{background:var(--surface2);color:var(--text)}
+.tab.active{background:var(--surface2);color:var(--text);border-color:#4a5180}
+.tab-opus.active{border-color:var(--opus);color:var(--opus)}
+.tab-sonnet.active{border-color:var(--sonnet);color:var(--sonnet)}
+.tab-haiku.active{border-color:var(--haiku);color:var(--haiku)}
+.tab-pill{opacity:.75;background:#ffffff0f;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:500}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.table-wrap{border:1px solid var(--border);border-radius:12px;overflow-x:auto}
+table{background:var(--surface);border-collapse:collapse;width:100%}
+thead th{background:var(--surface2);border-bottom:1px solid var(--border);color:var(--muted);letter-spacing:.05em;text-align:right;text-transform:uppercase;white-space:nowrap;padding:9px 12px;font-size:10px;font-weight:700}
+thead th.left{text-align:left}
+thead th.sortable{cursor:pointer;-webkit-user-select:none;user-select:none}
+thead th.sortable:hover{color:var(--text);background:#262a38}
+thead th.sort-active{color:var(--text)}
+.sort-arrow{color:var(--bar-fill);margin-left:3px;font-style:normal}
+.sort-hint{opacity:.25;margin-left:3px;font-style:normal}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--surface2)}
+td{vertical-align:middle;padding:9px 12px}
+td.rank{color:var(--muted);width:30px;font-size:11px;font-weight:600}
+td.key-name{min-width:130px;max-width:210px}
+.key-label{text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px;font-weight:500;display:block;overflow:hidden}
+.bar-wrap{background:var(--bar-bg);border-radius:2px;height:3px;overflow:hidden}
+.bar{background:var(--bar-fill);border-radius:2px;min-width:1px;height:100%}
+td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;font-size:12px}
+td.col-total{color:var(--gold);font-weight:600}
+td.col-cost{color:var(--cost);font-weight:600}
+td.col-hit{color:var(--haiku)}
+td.col-models{min-width:160px;max-width:300px}
+.badge{white-space:nowrap;border-radius:20px;margin:1px 2px 1px 0;padding:2px 7px;font-size:10px;font-weight:600;display:inline-block}
+.badge-opus{color:var(--opus);background:#3b1f5e}
+.badge-sonnet{color:var(--sonnet);background:#1a3050}
+.badge-haiku{color:var(--haiku);background:#0f3028}
+.badge-other{background:var(--border);color:var(--other)}
+tfoot td{background:var(--surface2);border-top:2px solid var(--border);text-align:right;padding:10px 12px;font-size:12px;font-weight:700}
+tfoot td.left{text-align:left}
+tfoot td.col-total{color:var(--gold)}
+tfoot td.col-cost{color:var(--cost)}
+.key-count{color:var(--muted);font-size:11px;font-weight:400}
+.empty-msg{color:var(--muted);text-align:center;padding:32px 20px}
+.footer-note{color:var(--muted);text-align:center;margin-top:16px;font-size:11px}
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  min-height: 100vh;
+/* Bottom navigation icons */
+.bottom-icon {
+    position: fixed;
+    bottom: 20px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.3s, transform 0.2s;
+    z-index: 100;
+    background: none;
+    border: none;
+    padding: 5px;
+    color: var(--text);
+    text-decoration: none;
 }
+.bottom-icon:hover { opacity: 1; transform: scale(1.1); }
+#home-link { left: 20px; }
+#dev-btn { right: 20px; }
 
-/* ─── Drop Zone — expanded ───────────────────────────────────────────────── */
-#drop-zone {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 40px;
+/* Dev Menu */
+#dev-menu {
+    position: fixed;
+    bottom: 60px;
+    right: 20px;
+    background: var(--dev-bg);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    width: 250px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    z-index: 101;
 }
-
-.drop-card {
-  background: var(--surface);
-  border: 2px dashed var(--border);
-  border-radius: 16px;
-  cursor: pointer;
-  max-width: 460px;
-  padding: 56px 40px 48px;
-  text-align: center;
-  transition: border-color .15s, background .15s;
-  width: 100%;
+#dev-menu.active { display: flex; }
+.dev-item {
+    font-size: 0.85rem;
+    color: #ccc;
+    text-decoration: none;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
 }
-.drop-card.drag-over, .drop-card:hover {
-  background: var(--surface2);
-  border-color: var(--bar-fill);
-}
-.drop-icon { color: var(--muted); margin-bottom: 18px; }
-.drop-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-.drop-hint { color: var(--muted); font-size: 13px; }
-.drop-hint strong { color: var(--bar-fill); cursor: pointer; }
-.drop-hint strong:hover { text-decoration: underline; }
-.drop-meta { color: var(--muted); font-size: 11px; margin-top: 20px; opacity: .6; }
-#file-input { display: none; }
-
-/* ─── Drop Zone — minimized (after file load) ────────────────────────────── */
-#drop-zone.minimized {
-  min-height: 0;
-  padding: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-
-#drop-zone.minimized .drop-card {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  display: flex;
-  flex-direction: row;
-  gap: 10px;
-  max-width: none;
-  padding: 10px 20px;
-  text-align: left;
-}
-#drop-zone.minimized .drop-card:hover,
-#drop-zone.minimized .drop-card.drag-over {
-  background: var(--surface2);
-  border-color: transparent;
-}
-#drop-zone.minimized .drop-icon { margin-bottom: 0; flex-shrink: 0; }
-#drop-zone.minimized .drop-icon svg { width: 16px; height: 16px; }
-#drop-zone.minimized .drop-title { font-size: 12px; font-weight: 600; margin-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
-#drop-zone.minimized .drop-hint { font-size: 11px; }
-#drop-zone.minimized .drop-meta { display: none; }
-
-/* ─── Report ─────────────────────────────────────────────────────────────── */
-#report {
-  margin: 0 auto;
-  max-width: 1500px;
-  padding: 28px 24px 64px;
-}
-
-/* ─── Header ─────────────────────────────────────────────────────────────── */
-.report-header {
-  align-items: flex-start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 22px;
-}
-.report-header h1 { font-size: 21px; font-weight: 600; margin-bottom: 3px; }
-.report-header p { color: var(--muted); font-size: 12px; }
-
-.btn-reset {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 7px 14px;
-  transition: background .1s, color .1s;
-}
-.btn-reset:hover { background: var(--surface2); color: var(--text); }
-
-/* ─── Date Filter ────────────────────────────────────────────────────────── */
-.date-filter {
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
-  padding: 10px 14px;
-}
-
-.filter-label {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .07em;
-  margin-right: 2px;
-  text-transform: uppercase;
-}
-
-.period-btns { display: flex; gap: 3px; }
-
-.btn-period {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 11px;
-  transition: background .1s, color .1s, border-color .1s;
-}
-.btn-period:hover { background: var(--surface2); color: var(--text); }
-.btn-period.active { background: var(--surface2); border-color: #4a5180; color: var(--text); }
-
-.key-search {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 12px;
-  margin-left: auto;
-  outline: none;
-  padding: 5px 10px;
-  width: 200px;
-}
-.key-search::placeholder { color: var(--muted); }
-.key-search:focus { border-color: #4a5180; }
-
-.date-nav { align-items: center; display: flex; gap: 8px; }
-
-.btn-nav {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  transition: background .1s;
-}
-.btn-nav:hover { background: #2a2e40; }
-
-#period-label {
-  font-size: 13px;
-  font-weight: 600;
-  min-width: 170px;
-  text-align: center;
-}
-
-/* ─── Summary Cards ──────────────────────────────────────────────────────── */
-.summary-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-  margin-bottom: 22px;
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 13px 15px;
-}
-.card .label {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  margin-bottom: 5px;
-  text-transform: uppercase;
-}
-.card .value { font-size: 19px; font-weight: 700; }
-.card.hl-cost  { border-color: rgba(251,146,60,.3); }
-.card.hl-cost .value { color: var(--cost); }
-.card.hl-tok .value { color: var(--gold); }
-
-/* ─── Tabs ───────────────────────────────────────────────────────────────── */
-.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-
-.tab {
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  cursor: pointer;
-  display: flex;
-  font-size: 12px;
-  font-weight: 600;
-  gap: 7px;
-  padding: 6px 13px;
-  transition: background .12s, color .12s, border-color .12s;
-}
-.tab:hover { background: var(--surface2); color: var(--text); }
-.tab.active { background: var(--surface2); border-color: #4a5180; color: var(--text); }
-.tab-opus.active   { border-color: var(--opus);   color: var(--opus); }
-.tab-sonnet.active { border-color: var(--sonnet); color: var(--sonnet); }
-.tab-haiku.active  { border-color: var(--haiku);  color: var(--haiku); }
-
-.tab-pill {
-  background: rgba(255,255,255,.06);
-  border-radius: 20px;
-  font-size: 10px;
-  font-weight: 500;
-  opacity: .75;
-  padding: 1px 7px;
-}
-
-/* ─── Table ──────────────────────────────────────────────────────────────── */
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
-
-.table-wrap {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow-x: auto;
-}
-
-table {
-  background: var(--surface);
-  border-collapse: collapse;
-  width: 100%;
-}
-
-thead th {
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .05em;
-  padding: 9px 12px;
-  text-align: right;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-thead th.left { text-align: left; }
-thead th.sortable { cursor: pointer; user-select: none; }
-thead th.sortable:hover { color: var(--text); background: #262a38; }
-thead th.sort-active { color: var(--text); }
-.sort-arrow { color: var(--bar-fill); font-style: normal; margin-left: 3px; }
-.sort-hint  { opacity: .25; font-style: normal; margin-left: 3px; }
-
-tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
-tbody tr:last-child { border-bottom: none; }
-tbody tr:hover { background: var(--surface2); }
-
-td { padding: 9px 12px; vertical-align: middle; }
-td.rank { color: var(--muted); font-size: 11px; font-weight: 600; width: 30px; }
-td.key-name { max-width: 210px; min-width: 130px; }
-
-.key-label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bar-wrap { background: var(--bar-bg); border-radius: 2px; height: 3px; overflow: hidden; }
-.bar { background: var(--bar-fill); border-radius: 2px; height: 100%; min-width: 1px; }
-
-td.num {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
-td.col-total { color: var(--gold); font-weight: 600; }
-td.col-cost  { color: var(--cost); font-weight: 600; }
-td.col-hit   { color: var(--haiku); }
-td.col-models { max-width: 300px; min-width: 160px; }
-
-.badge {
-  border-radius: 20px;
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 600;
-  margin: 1px 2px 1px 0;
-  padding: 2px 7px;
-  white-space: nowrap;
-}
-.badge-opus   { background: #3b1f5e; color: var(--opus); }
-.badge-sonnet { background: #1a3050; color: var(--sonnet); }
-.badge-haiku  { background: #0f3028; color: var(--haiku); }
-.badge-other  { background: var(--border); color: var(--other); }
-
-tfoot td {
-  background: var(--surface2);
-  border-top: 2px solid var(--border);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 10px 12px;
-  text-align: right;
-}
-tfoot td.left { text-align: left; }
-tfoot td.col-total { color: var(--gold); }
-tfoot td.col-cost  { color: var(--cost); }
-.key-count { color: var(--muted); font-size: 11px; font-weight: 400; }
-
-.empty-msg { color: var(--muted); padding: 32px 20px; text-align: center; }
-
-/* ─── Footer ─────────────────────────────────────────────────────────────── */
-.footer-note {
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 16px;
-  text-align: center;
+.dev-item:hover { background: #333; color: white; }
+.dev-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #666;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
 }
 </style>
 </head>
 <body>
 
-<!-- ─── Drop Zone ──────────────────────────────────────────────────────────── -->
 <div id="drop-zone">
   <div class="drop-card" id="drop-card">
     <div class="drop-icon">
-      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
+      <svg width="52" height="52" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.4" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
     </div>
     <div class="drop-title">Drop your CSV here</div>
     <p class="drop-hint">
@@ -388,9 +201,7 @@ tfoot td.col-cost  { color: var(--cost); }
   </div>
 </div>
 
-<!-- ─── Report ─────────────────────────────────────────────────────────────── -->
 <div id="report" hidden>
-
   <div class="report-header">
     <div>
       <h1>Claude API Token Usage</h1>
@@ -402,12 +213,12 @@ tfoot td.col-cost  { color: var(--cost); }
   <div class="date-filter">
     <span class="filter-label">Period</span>
     <div class="period-btns">
-      <button class="btn-period active" data-period="all">All</button>
+      <button class="active btn-period" data-period="all">All</button>
       <button class="btn-period" data-period="month">Month</button>
       <button class="btn-period" data-period="week">Week</button>
       <button class="btn-period" data-period="day">Day</button>
     </div>
-    <input type="text" id="keySearch" class="key-search" placeholder="Search API key…">
+    <input id="keySearch" class="key-search" placeholder="Search API key…">
     <div class="date-nav" id="date-nav" style="display:none">
       <button class="btn-nav" id="btn-prev">◀</button>
       <span id="period-label"></span>
@@ -419,664 +230,207 @@ tfoot td.col-cost  { color: var(--cost); }
   <div class="tabs" id="tabs"></div>
   <div id="panels"></div>
   <p class="footer-note" id="footer-note"></p>
+</div>
 
+<!-- Navigation Icons -->
+<a href="index.html" id="home-link" class="bottom-icon" title="Back to Home">🏠</a>
+<button id="dev-btn" class="bottom-icon" onclick="toggleDevMenu()" title="Developer Menu">🛠️</button>
+
+<!-- Developer Menu -->
+<div id="dev-menu">
+    <div class="dev-label">Developer Options</div>
+    <a href="https://github.com/scalopus/scalopus.github.io/blob/main/src/claude-usage.html" target="_blank" class="dev-item">
+        <span>📂</span> View Source Code
+    </a>
+    <button class="dev-item" onclick="copyAIPrompt()">
+        <span>🤖</span> AI Prompt
+    </button>
+    <div class="dev-label">Tool Information</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px">Version: 1.0.0</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px">Created: 2026-06-09</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px">Model: Claude Sonnet 4.6</div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════════════
-// PRICING  (prices are USD per million tokens)
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// Columns: [input, cacheWrite5m, cacheWrite1h, cacheRead, output]
-//
-// Cache write multipliers vs. base input:  5m = ×1.25,  1h = ×2,  read = ×0.1
-// Batch API: 50% off input & output (cache ops scaled proportionally)
-// Fast mode (Opus 4.6/4.7): input $30, output $150; cache multipliers stack on top
-// Data residency (geo=us): ×1.1 on all token costs (not searches)
-// Web search: $0.01 per search
-
-const PRICE_STANDARD = {
-  //  key            input    cw5m    cw1h    cr      output
-  'opus-4x':       [5,       6.25,   10,     0.50,   25  ],   // 4.5 / 4.6 / 4.7 / 4.8+
-  'opus-4-old':    [15,      18.75,  30,     1.50,   75  ],   // 4.0 / 4.1
-  'sonnet-4x':     [3,       3.75,   6,      0.30,   15  ],   // 4.0 / 4.5 / 4.6+
-  'haiku-4-5':     [1,       1.25,   2,      0.10,   5   ],
-  'haiku-3-5':     [0.80,    1.00,   1.60,   0.08,   4   ],
-};
-
-const PRICE_BATCH = {
-  'opus-4x':       [2.50,    3.125,  5,      0.25,   12.50],
-  'opus-4-old':    [7.50,    9.375,  15,     0.75,   37.50],
-  'sonnet-4x':     [1.50,    1.875,  3,      0.15,   7.50 ],
-  'haiku-4-5':     [0.50,    0.625,  1,      0.05,   2.50 ],
-  'haiku-3-5':     [0.40,    0.50,   0.80,   0.04,   2.00 ],
-};
-
-// Fast mode only applies to Opus 4.6 and 4.7; cache multipliers stack on top
-const PRICE_FAST = {
-  'opus-4-6':      [30,      37.5,   60,     3,      150],
-  'opus-4-7':      [30,      37.5,   60,     3,      150],
-};
-
-function getModelTier(model) {
-  const m = model.toLowerCase();
-  const isOpus   = m.includes('opus');
-  const isSonnet = m.includes('sonnet');
-  const isHaiku  = m.includes('haiku');
-
-  // Extract the first major.minor version pair (e.g. "4-7" → 4, 7)
-  const vm = m.match(/(\d+)[.\-](\d+)/);
-  const major = vm ? +vm[1] : 0;
-  const minor = vm ? +vm[2] : 0;
-
-  if (isOpus) {
-    if (major === 4 && minor <= 1) return 'opus-4-old';
-    return 'opus-4x';   // 4.2+
-  }
-  if (isSonnet) return 'sonnet-4x';
-  if (isHaiku)  return major <= 3 ? 'haiku-3-5' : 'haiku-4-5';
-  return 'sonnet-4x'; // unknown → fall back to Sonnet
-}
-
-function getModelFastKey(model) {
-  // Returns a PRICE_FAST key if this model supports fast mode, else null
-  const m = model.toLowerCase();
-  if (!m.includes('opus')) return null;
-  const vm = m.match(/(\d+)[.\-](\d+)/);
-  if (!vm) return null;
-  const minor = +vm[2];
-  if (minor === 6) return 'opus-4-6';
-  if (minor === 7) return 'opus-4-7';
-  return null;
-}
-
-function rowCost(row) {
-  const tier      = getModelTier(row.model_version || '');
-  const usageType = (row.usage_type || '').toLowerCase();
-  const speed     = (row.speed || '').toLowerCase().trim();
-  const geo       = (row.inference_geo || '').toLowerCase();
-
-  let p;
-  if (speed === 'fast') {
-    const fk = getModelFastKey(row.model_version || '');
-    p = (fk && PRICE_FAST[fk]) ? PRICE_FAST[fk] : PRICE_STANDARD[tier];
-  } else if (usageType === 'batch') {
-    p = PRICE_BATCH[tier] || PRICE_BATCH['sonnet-4x'];
-  } else {
-    p = PRICE_STANDARD[tier] || PRICE_STANDARD['sonnet-4x'];
-  }
-
-  const inp  = safeInt(row.usage_input_tokens_no_cache);
-  const cw5m = safeInt(row.usage_input_tokens_cache_write_5m);
-  const cw1h = safeInt(row.usage_input_tokens_cache_write_1h);
-  const cr   = safeInt(row.usage_input_tokens_cache_read);
-  const out  = safeInt(row.usage_output_tokens);
-  const srch = safeInt(row.web_search_count);
-
-  const tokenCost = (inp * p[0] + cw5m * p[1] + cw1h * p[2] + cr * p[3] + out * p[4]) / 1e6;
-  const searchCost = srch * 0.01;
-
-  // Data residency: 1.1× on token cost only
-  return (geo === 'us' ? tokenCost * 1.1 : tokenCost) + searchCost;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CSV PARSER
-// ═══════════════════════════════════════════════════════════════════════════
-function parseCSV(text) {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
-  if (lines.length < 2) return [];
-
-  function parseLine(line) {
-    const cols = [];
-    let cur = '', inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
-        else inQ = !inQ;
-      } else if (ch === ',' && !inQ) {
-        cols.push(cur.trim()); cur = '';
-      } else cur += ch;
-    }
-    cols.push(cur.trim());
-    return cols;
-  }
-
-  const headers = parseLine(lines[0]);
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const vals = parseLine(line);
-    const row = {};
-    headers.forEach((h, i) => { row[h.trim()] = (vals[i] || '').trim(); });
-    row._cost = rowCost(row);
-    return row;
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-function safeInt(v) { return parseInt(String(v || 0).replace(/[^0-9-]/g, '')) || 0; }
-
-function fmt(n) {
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-  return n.toLocaleString();
-}
-
-function fmtCost(c) {
-  if (c === 0) return '$0.00';
-  if (c < 0.005) return '< $0.01';
-  if (c >= 1000) return '$' + (c / 1000).toFixed(2) + 'K';
-  return '$' + c.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function pct(part, total) { return total ? (part / total * 100).toFixed(1) + '%' : '—'; }
-
-function modelFamily(model) {
-  const m = model.toLowerCase();
-  return m.includes('opus') ? 'opus' : m.includes('sonnet') ? 'sonnet' : m.includes('haiku') ? 'haiku' : 'other';
-}
-
-function shortModelName(model) {
-  const m = model.toLowerCase().replace('claude-', '');
-  const parts = m.split('-');
-  const fam = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-  const vParts = parts.slice(1).filter(p => /^\d{1,2}$/.test(p));
-  return vParts.length ? `${fam} ${vParts.join('.')}` : fam;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DATE HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-function parseDate(str) {
-  const [y, mo, d] = str.split('-').map(Number);
-  return new Date(Date.UTC(y, mo - 1, d));
-}
-
-function weekStart(date) {
-  const d = new Date(date);
-  const day = d.getUTCDay(); // 0=Sun
-  d.setUTCDate(d.getUTCDate() - (day === 0 ? 6 : day - 1)); // Monday start
-  return d;
-}
-
-function periodLabel(mode, date) {
-  if (mode === 'all') return '';
-  if (mode === 'month') return `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-  if (mode === 'day')   return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
-  if (mode === 'week') {
-    const s = weekStart(date);
-    const e = new Date(s); e.setUTCDate(e.getUTCDate() + 6);
-    const [sy, sm, sd] = [s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()];
-    const [ey, em, ed] = [e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate()];
-    if (sy === ey) {
-      return sm === em
-        ? `${MONTHS[sm]} ${sd}–${ed}, ${sy}`
-        : `${MONTHS[sm]} ${sd} – ${MONTHS[em]} ${ed}, ${sy}`;
-    }
-    return `${MONTHS[sm]} ${sd}, ${sy} – ${MONTHS[em]} ${ed}, ${ey}`;
-  }
-  return '';
-}
-
-function rowInPeriod(row, mode, filterDate) {
-  if (mode === 'all') return true;
-  const ds = (row.usage_date_utc || '').trim();
-  if (!ds) return false;
-  if (mode === 'day') return ds === filterDate.toISOString().slice(0, 10);
-  if (mode === 'month') return ds.slice(0, 7) === filterDate.toISOString().slice(0, 7);
-  if (mode === 'week') {
-    const d = parseDate(ds);
-    const s = weekStart(filterDate);
-    const e = new Date(s); e.setUTCDate(e.getUTCDate() + 7);
-    return d >= s && d < e;
-  }
-  return true;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════════════════
-let state = {
-  rows: [],
-  workspace: '',
-  allDates: [],
-  filterMode: 'all',
-  filterDate: null,
-  activeTab: 'all',
-  sortCol: '_total',
-  sortDir: 'desc',
-  keyFilter: '',
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// AGGREGATION
-// ═══════════════════════════════════════════════════════════════════════════
-function newAgg() {
-  return { input: 0, cw5m: 0, cw1h: 0, cacheRead: 0, output: 0, searches: 0, cost: 0, days: new Set(), models: {} };
-}
-
-function addRow(agg, row) {
-  agg.input     += safeInt(row.usage_input_tokens_no_cache);
-  agg.cw5m      += safeInt(row.usage_input_tokens_cache_write_5m);
-  agg.cw1h      += safeInt(row.usage_input_tokens_cache_write_1h);
-  agg.cacheRead += safeInt(row.usage_input_tokens_cache_read);
-  agg.output    += safeInt(row.usage_output_tokens);
-  agg.searches  += safeInt(row.web_search_count);
-  agg.cost      += row._cost;
-  agg.days.add((row.usage_date_utc || '').trim());
-  const m = row.model_version;
-  agg.models[m] = (agg.models[m] || 0) + 1;
-}
-
-function aggTotal(a) { return a.input + a.cw5m + a.cw1h + a.cacheRead + a.output; }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SORT HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-function getSortValue([key, agg], col) {
-  switch (col) {
-    case 'key':        return key.toLowerCase();
-    case '_total':     return agg._total;
-    case 'cost':       return agg.cost;
-    case 'input':      return agg.input;
-    case 'cacheWrite': return agg.cw5m + agg.cw1h;
-    case 'cacheRead':  return agg.cacheRead;
-    case 'output':     return agg.output;
-    case 'cacheHit':   return (agg.cacheRead + agg.cw5m + agg.cw1h) > 0
-                         ? agg.cacheRead / (agg.cacheRead + agg.cw5m + agg.cw1h)
-                         : 0;
-    case 'searches':   return agg.searches;
-    case 'days':       return agg.days.size;
-    default:           return agg._total;
-  }
-}
-
-function setSortCol(col) {
-  if (state.sortCol === col) {
-    state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
-  } else {
-    state.sortCol = col;
-    state.sortDir = 'desc';
-  }
-  render();
-}
-
-function thSort(col, label, isLeft) {
-  const active  = state.sortCol === col;
-  const classes = ['sortable', isLeft ? 'left' : '', active ? 'sort-active' : ''].filter(Boolean).join(' ');
-  const arrow   = active
-    ? `<i class="sort-arrow">${state.sortDir === 'desc' ? '▼' : '▲'}</i>`
-    : '<i class="sort-hint">⇅</i>';
-  return `<th class="${classes}" onclick="setSortCol('${col}')">${label}${arrow}</th>`;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TABLE BUILDER
-// ═══════════════════════════════════════════════════════════════════════════
-function buildTable(entries, showModels) {
-  if (!entries.length) {
-    return '<div class="table-wrap"><p class="empty-msg">No data for this period</p></div>';
-  }
-
-  // Sort entries by current sort state
-  const { sortCol, sortDir } = state;
-  const sorted = [...entries].sort((a, b) => {
-    const va = getSortValue(a, sortCol);
-    const vb = getSortValue(b, sortCol);
-    if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-    return sortDir === 'asc' ? va - vb : vb - va;
-  });
-
-  // Bar is always relative to the highest token count regardless of sort
-  const maxTok = entries.reduce((m, [, a]) => Math.max(m, a._total), 0) || 1;
-
-  const bodyRows = sorted.map(([key, agg], i) => {
-    const cacheWrite = agg.cw5m + agg.cw1h;
-    const barW = Math.round(agg._total / maxTok * 100);
-    const hitPct = pct(agg.cacheRead, agg.cacheRead + cacheWrite);
-
-    const modelCell = showModels
-      ? `<td class="col-models">${
-          Object.entries(agg.models)
-            .sort((a, b) => b[1] - a[1])
-            .map(([m]) => `<span class="badge badge-${modelFamily(m)}">${shortModelName(m)}</span>`)
-            .join('')
-        }</td>`
-      : '';
-
-    return `<tr>
-      <td class="rank">#${i + 1}</td>
+let e={"opus-4x":[5,6.25,10,.5,25],"opus-4-old":[15,18.75,30,1.5,75],"sonnet-4x":[3,3.75,6,.3,15],"haiku-4-5":[1,1.25,2,.1,5],"haiku-3-5":[.8,1,1.6,.08,4]},t={"opus-4x":[2.5,3.125,5,.25,12.5],"opus-4-old":[7.5,9.375,15,.75,37.5],"sonnet-4x":[1.5,1.875,3,.15,7.5],"haiku-4-5":[.5,.625,1,.05,2.5],"haiku-3-5":[.4,.5,.8,.04,2]},a={"opus-4-6":[30,37.5,60,3,150],"opus-4-7":[30,37.5,60,3,150]};function s(e){return parseInt(String(e||0).replace(/[^0-9-]/g,""))||0}function n(e){return e>=1e9?(e/1e9).toFixed(2)+"B":e>=1e6?(e/1e6).toFixed(2)+"M":e>=1e3?(e/1e3).toFixed(1)+"K":e.toLocaleString()}function c(e){return 0===e?"$0.00":e<.005?"< $0.01":e>=1e3?"$"+(e/1e3).toFixed(2)+"K":"$"+e.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",")}function l(e,t){return t?(e/t*100).toFixed(1)+"%":"—"}function o(e){let t=e.toLowerCase();return t.includes("opus")?"opus":t.includes("sonnet")?"sonnet":t.includes("haiku")?"haiku":"other"}function r(e){let t=e.toLowerCase().replace("claude-","").split("-"),a=t[0].charAt(0).toUpperCase()+t[0].slice(1),s=t.slice(1).filter(e=>/^\d{1,2}$/.test(e));return s.length?`${a} ${s.join(".")}`:a}let d=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];function i(e){let[t,a,s]=e.split("-").map(Number);return new Date(Date.UTC(t,a-1,s))}function u(e){let t=new Date(e),a=t.getUTCDay();return t.setUTCDate(t.getUTCDate()-(0===a?6:a-1)),t}let p={rows:[],workspace:"",allDates:[],filterMode:"all",filterDate:null,activeTab:"all",sortCol:"_total",sortDir:"desc",keyFilter:""};function h(){return{input:0,cw5m:0,cw1h:0,cacheRead:0,output:0,searches:0,cost:0,days:new Set,models:{}}}function m(e,t){e.input+=s(t.usage_input_tokens_no_cache),e.cw5m+=s(t.usage_input_tokens_cache_write_5m),e.cw1h+=s(t.usage_input_tokens_cache_write_1h),e.cacheRead+=s(t.usage_input_tokens_cache_read),e.output+=s(t.usage_output_tokens),e.searches+=s(t.web_search_count),e.cost+=t._cost,e.days.add((t.usage_date_utc||"").trim());let a=t.model_version;e.models[a]=(e.models[a]||0)+1}function v(e){return e.input+e.cw5m+e.cw1h+e.cacheRead+e.output}function g([e,t],a){switch(a){case"key":return e.toLowerCase();case"_total":default:return t._total;case"cost":return t.cost;case"input":return t.input;case"cacheWrite":return t.cw5m+t.cw1h;case"cacheRead":return t.cacheRead;case"output":return t.output;case"cacheHit":return t.cacheRead+t.cw5m+t.cw1h>0?t.cacheRead/(t.cacheRead+t.cw5m+t.cw1h):0;case"searches":return t.searches;case"days":return t.days.size}}function _(e,t,a){let s=p.sortCol===e,n=["sortable",a?"left":"",s?"sort-active":""].filter(Boolean).join(" "),c=s?`<i class="sort-arrow">${"desc"===p.sortDir?"▼":"▲"}</i>`:'<i class="sort-hint">⇅</i>';return`<th class="${n}" onclick="setSortCol('${e}')">${t}${c}</th>`}function $(e,t){if(!e.length)return'<div class="table-wrap"><p class="empty-msg">No data for this period</p></div>';let{sortCol:a,sortDir:s}=p,d=[...e].sort((e,t)=>{let n=g(e,a),c=g(t,a);return"string"==typeof n?"asc"===s?n.localeCompare(c):c.localeCompare(n):"asc"===s?n-c:c-n}),i=e.reduce((e,[,t])=>Math.max(e,t._total),0)||1,u=d.map(([e,a],s)=>{let d=a.cw5m+a.cw1h,u=Math.round(a._total/i*100),p=l(a.cacheRead,a.cacheRead+d),h=t?`<td class="col-models">${Object.entries(a.models).sort((e,t)=>t[1]-e[1]).map(([e])=>`<span class="badge badge-${o(e)}">${r(e)}</span>`).join("")}</td>`:"";return`<tr>
+      <td class="rank">#${s+1}</td>
       <td class="key-name">
-        <span class="key-label" title="${esc(key)}">${esc(key)}</span>
-        <div class="bar-wrap"><div class="bar" style="width:${barW}%"></div></div>
+        <span class="key-label" title="${f(e)}">${f(e)}</span>
+        <div class="bar-wrap"><div class="bar" style="width:${u}%"></div></div>
       </td>
-      <td class="num col-total">${fmt(agg._total)}</td>
-      <td class="num col-cost">${fmtCost(agg.cost)}</td>
-      <td class="num">${fmt(agg.input)}</td>
-      <td class="num">${fmt(cacheWrite)}</td>
-      <td class="num">${fmt(agg.cacheRead)}</td>
-      <td class="num">${fmt(agg.output)}</td>
-      <td class="num col-hit">${hitPct}</td>
-      <td class="num">${agg.searches.toLocaleString()}</td>
-      <td class="num">${agg.days.size}</td>
-      ${modelCell}
-    </tr>`;
-  }).join('');
-
-  // Grand total row
-  const g = { input: 0, cw5m: 0, cw1h: 0, cacheRead: 0, output: 0, searches: 0, cost: 0, _total: 0 };
-  entries.forEach(([, a]) => {
-    g.input     += a.input;
-    g.cw5m      += a.cw5m;
-    g.cw1h      += a.cw1h;
-    g.cacheRead += a.cacheRead;
-    g.output    += a.output;
-    g.searches  += a.searches;
-    g.cost      += a.cost;
-    g._total    += a._total;
-  });
-  const gCacheWrite = g.cw5m + g.cw1h;
-  const n = entries.length;
-  const modelsTh   = showModels ? '<th class="left">Models</th>' : '';
-  const modelsFoot = showModels ? '<td></td>' : '';
-
-  return `<div class="table-wrap"><table>
+      <td class="num col-total">${n(a._total)}</td>
+      <td class="num col-cost">${c(a.cost)}</td>
+      <td class="num">${n(a.input)}</td>
+      <td class="num">${n(d)}</td>
+      <td class="num">${n(a.cacheRead)}</td>
+      <td class="num">${n(a.output)}</td>
+      <td class="num col-hit">${p}</td>
+      <td class="num">${a.searches.toLocaleString()}</td>
+      <td class="num">${a.days.size}</td>
+      ${h}
+    </tr>`}).join(""),h={input:0,cw5m:0,cw1h:0,cacheRead:0,output:0,searches:0,cost:0,_total:0};e.forEach(([,e])=>{h.input+=e.input,h.cw5m+=e.cw5m,h.cw1h+=e.cw1h,h.cacheRead+=e.cacheRead,h.output+=e.output,h.searches+=e.searches,h.cost+=e.cost,h._total+=e._total});let m=h.cw5m+h.cw1h,v=e.length;return`<div class="table-wrap"><table>
     <thead><tr>
       <th class="left">#</th>
-      ${thSort('key',        'API Key',      true)}
-      ${thSort('_total',     'Total Tokens'      )}
-      ${thSort('cost',       'Est. Cost'         )}
-      ${thSort('input',      'Input'             )}
-      ${thSort('cacheWrite', 'Cache Write'       )}
-      ${thSort('cacheRead',  'Cache Read'        )}
-      ${thSort('output',     'Output'            )}
-      ${thSort('cacheHit',   'Cache Hit%'        )}
-      ${thSort('searches',   'Searches'          )}
-      ${thSort('days',       'Days'              )}
-      ${modelsTh}
+      ${_("key","API Key",true)}
+      ${_("_total","Total Tokens")}
+      ${_("cost","Est. Cost")}
+      ${_("input","Input")}
+      ${_("cacheWrite","Cache Write")}
+      ${_("cacheRead","Cache Read")}
+      ${_("output","Output")}
+      ${_("cacheHit","Cache Hit%")}
+      ${_("searches","Searches")}
+      ${_("days","Days")}
+      ${t?'<th class="left">Models</th>':""}
     </tr></thead>
-    <tbody>${bodyRows}</tbody>
+    <tbody>${u}</tbody>
     <tfoot><tr>
       <td colspan="2" class="left">
-        Grand Total <span class="key-count">(${n} key${n !== 1 ? 's' : ''})</span>
+        Grand Total <span class="key-count">(${v} key${1!==v?"s":""})</span>
       </td>
-      <td class="num col-total">${fmt(g._total)}</td>
-      <td class="num col-cost">${fmtCost(g.cost)}</td>
-      <td class="num">${fmt(g.input)}</td>
-      <td class="num">${fmt(gCacheWrite)}</td>
-      <td class="num">${fmt(g.cacheRead)}</td>
-      <td class="num">${fmt(g.output)}</td>
+      <td class="num col-total">${n(h._total)}</td>
+      <td class="num col-cost">${c(h.cost)}</td>
+      <td class="num">${n(h.input)}</td>
+      <td class="num">${n(m)}</td>
+      <td class="num">${n(h.cacheRead)}</td>
+      <td class="num">${n(h.output)}</td>
       <td class="num">—</td>
-      <td class="num">${g.searches.toLocaleString()}</td>
+      <td class="num">${h.searches.toLocaleString()}</td>
       <td class="num">—</td>
-      ${modelsFoot}
+      ${t?"<td></td>":""}
     </tr></tfoot>
-  </table></div>`;
-}
-
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// RENDER
-// ═══════════════════════════════════════════════════════════════════════════
-function render() {
-  const { rows, filterMode, filterDate, activeTab, allDates } = state;
-
-  // ── Date filter UI
-  document.getElementById('date-nav').style.display = filterMode === 'all' ? 'none' : '';
-  document.getElementById('period-label').textContent = periodLabel(filterMode, filterDate);
-
-  // ── Apply date filter
-  let visible = rows.filter(r => rowInPeriod(r, filterMode, filterDate));
-
-  // ── Apply API key filter
-  const { keyFilter } = state;
-  if (keyFilter) {
-    const q = keyFilter.toLowerCase();
-    visible = visible.filter(r => (r.api_key || '').toLowerCase().includes(q));
-  }
-
-  // ── Aggregate: allAgg[apiKey], modelAgg[model][apiKey], modelTokenTotals[model]
-  const allAgg = {};
-  const modelAgg = {};
-  const modelTok = {};
-
-  visible.forEach(row => {
-    const key   = row.api_key   || '(unknown)';
-    const model = row.model_version || '(unknown)';
-
-    if (!allAgg[key]) allAgg[key] = newAgg();
-    addRow(allAgg[key], row);
-
-    if (!modelAgg[model]) modelAgg[model] = {};
-    if (!modelAgg[model][key]) modelAgg[model][key] = newAgg();
-    addRow(modelAgg[model][key], row);
-
-    const tok = safeInt(row.usage_input_tokens_no_cache)
-      + safeInt(row.usage_input_tokens_cache_write_5m)
-      + safeInt(row.usage_input_tokens_cache_write_1h)
-      + safeInt(row.usage_input_tokens_cache_read)
-      + safeInt(row.usage_output_tokens);
-    modelTok[model] = (modelTok[model] || 0) + tok;
-  });
-
-  // Compute _total for each agg
-  Object.values(allAgg).forEach(a => { a._total = aggTotal(a); });
-  Object.values(modelAgg).forEach(mData =>
-    Object.values(mData).forEach(a => { a._total = aggTotal(a); })
-  );
-
-  // Sort
-  const allRanked = Object.entries(allAgg).sort((a, b) => b[1]._total - a[1]._total);
-  const sortedModels = Object.keys(modelTok).sort((a, b) => modelTok[b] - modelTok[a]);
-  const modelRanked = {};
-  sortedModels.forEach(m => {
-    modelRanked[m] = Object.entries(modelAgg[m] || {}).sort((a, b) => b[1]._total - a[1]._total);
-  });
-
-  // ── Grand totals for summary cards
-  const G = newAgg();
-  allRanked.forEach(([, a]) => {
-    G.input     += a.input;
-    G.cw5m      += a.cw5m;
-    G.cw1h      += a.cw1h;
-    G.cacheRead += a.cacheRead;
-    G.output    += a.output;
-    G.searches  += a.searches;
-    G.cost      += a.cost;
-  });
-  G._total = G.input + G.cw5m + G.cw1h + G.cacheRead + G.output;
-  const cacheWrite = G.cw5m + G.cw1h;
-  const hitRate = pct(G.cacheRead, G.cacheRead + cacheWrite);
-
-  // ── Summary cards
-  document.getElementById('summary-grid').innerHTML = `
+  </table></div>`}function f(e){return String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}function b(){let{rows:e,filterMode:t,filterDate:a,activeTab:g,allDates:_}=p;document.getElementById("date-nav").style.display="all"===t?"none":"",document.getElementById("period-label").textContent=function(e,t){if("all"===e)return"";if("month"===e)return`${d[t.getUTCMonth()]} ${t.getUTCFullYear()}`;if("day"===e)return`${d[t.getUTCMonth()]} ${t.getUTCDate()}, ${t.getUTCFullYear()}`;if("week"===e){let e=u(t),a=new Date(e);a.setUTCDate(a.getUTCDate()+6);let[s,n,c]=[e.getUTCFullYear(),e.getUTCMonth(),e.getUTCDate()],[l,o,r]=[a.getUTCFullYear(),a.getUTCMonth(),a.getUTCDate()];return s===l?n===o?`${d[n]} ${c}–${r}, ${s}`:`${d[n]} ${c} – ${d[o]} ${r}, ${s}`:`${d[n]} ${c}, ${s} – ${d[o]} ${r}, ${l}`}return""}(t,a);let w=e.filter(e=>(function(e,t,a){if("all"===t)return true;let s=(e.usage_date_utc||"").trim();if(!s)return false;if("day"===t)return s===a.toISOString().slice(0,10);if("month"===t)return s.slice(0,7)===a.toISOString().slice(0,7);if("week"===t){let e=i(s),t=u(a),n=new Date(t);return n.setUTCDate(n.getUTCDate()+7),e>=t&&e<n}return true})(e,t,a)),{keyFilter:y}=p;if(y){let e=y.toLowerCase();w=w.filter(t=>(t.api_key||"").toLowerCase().includes(e))}let k={},C={},E={};w.forEach(e=>{let t=e.api_key||"(unknown)",a=e.model_version||"(unknown)";k[t]||(k[t]=h()),m(k[t],e),C[a]||(C[a]={}),C[a][t]||(C[a][t]=h()),m(C[a][t],e);let n=s(e.usage_input_tokens_no_cache)+s(e.usage_input_tokens_cache_write_5m)+s(e.usage_input_tokens_cache_write_1h)+s(e.usage_input_tokens_cache_read)+s(e.usage_output_tokens);E[a]=(E[a]||0)+n}),Object.values(k).forEach(e=>{e._total=v(e)}),Object.values(C).forEach(e=>Object.values(e).forEach(e=>{e._total=v(e)}));let T=Object.entries(k).sort((e,t)=>t[1]._total-e[1]._total),D=Object.keys(E).sort((e,t)=>E[t]-E[e]),L={};D.forEach(e=>{L[e]=Object.entries(C[e]||{}).sort((e,t)=>t[1]._total-e[1]._total)});let I=h();T.forEach(([,e])=>{I.input+=e.input,I.cw5m+=e.cw5m,I.cw1h+=e.cw1h,I.cacheRead+=e.cacheRead,I.output+=e.output,I.searches+=e.searches,I.cost+=e.cost}),I._total=I.input+I.cw5m+I.cw1h+I.cacheRead+I.output;let x=I.cw5m+I.cw1h,B=l(I.cacheRead,I.cacheRead+x);document.getElementById("summary-grid").innerHTML=`
     <div class="card hl-cost">
       <div class="label">Est. Total Cost</div>
-      <div class="value">${fmtCost(G.cost)}</div>
+      <div class="value">${c(I.cost)}</div>
     </div>
     <div class="card hl-tok">
       <div class="label">Total Tokens</div>
-      <div class="value">${fmt(G._total)}</div>
+      <div class="value">${n(I._total)}</div>
     </div>
     <div class="card">
       <div class="label">Input (no cache)</div>
-      <div class="value">${fmt(G.input)}</div>
+      <div class="value">${n(I.input)}</div>
     </div>
     <div class="card">
       <div class="label">Cache Writes</div>
-      <div class="value">${fmt(cacheWrite)}</div>
+      <div class="value">${n(x)}</div>
     </div>
     <div class="card">
       <div class="label">Cache Reads</div>
-      <div class="value">${fmt(G.cacheRead)}</div>
+      <div class="value">${n(I.cacheRead)}</div>
     </div>
     <div class="card">
       <div class="label">Cache Hit Rate</div>
-      <div class="value">${hitRate}</div>
+      <div class="value">${B}</div>
     </div>
     <div class="card">
       <div class="label">Output Tokens</div>
-      <div class="value">${fmt(G.output)}</div>
+      <div class="value">${n(I.output)}</div>
     </div>
     <div class="card">
       <div class="label">Web Searches</div>
-      <div class="value">${G.searches.toLocaleString()}</div>
+      <div class="value">${I.searches.toLocaleString()}</div>
     </div>
     <div class="card">
       <div class="label">API Keys</div>
-      <div class="value">${allRanked.length}</div>
+      <div class="value">${T.length}</div>
     </div>
     <div class="card">
       <div class="label">Models</div>
-      <div class="value">${sortedModels.length}</div>
+      <div class="value">${D.length}</div>
     </div>
-  `;
-
-  // ── Tabs
-  const tabsEl = document.getElementById('tabs');
-  tabsEl.innerHTML = `
-    <button class="tab${activeTab === 'all' ? ' active' : ''}" data-tab="all">All Models</button>
-    ${sortedModels.map(m => {
-      const fam = modelFamily(m);
-      const active = activeTab === m ? ' active' : '';
-      return `<button class="tab tab-${fam}${active}" data-tab="${esc(m)}">
-        ${esc(shortModelName(m))}
-        <span class="tab-pill">${fmt(modelTok[m])}</span>
-      </button>`;
-    }).join('')}
-  `;
-
-  // ── Panels
-  const activeTabIsModel = activeTab !== 'all' && sortedModels.includes(activeTab);
-  const showAll = !activeTabIsModel;
-
-  document.getElementById('panels').innerHTML =
-    `<div class="tab-panel${showAll ? ' active' : ''}">${buildTable(allRanked, true)}</div>` +
-    sortedModels.map(m =>
-      `<div class="tab-panel${activeTab === m ? ' active' : ''}">${buildTable(modelRanked[m], false)}</div>`
-    ).join('');
-
-  // ── Footer
-  document.getElementById('footer-note').innerHTML =
-    `Pricing: claude.com/pricing (as of 2026-05) &nbsp;·&nbsp;
+  `;let S=document.getElementById("tabs");S.innerHTML=`
+    <button class="tab${"all"===g?" active":""}" data-tab="all">All Models</button>
+    ${D.map(e=>{let t=o(e),a=g===e?" active":"";return`<button class="tab tab-${t}${a}" data-tab="${f(e)}">
+        ${f(r(e))}
+        <span class="tab-pill">${n(E[e])}</span>
+      </button>`}).join("")}
+  `;let M="all"!==g&&D.includes(g);document.getElementById("panels").innerHTML=`<div class="tab-panel${!M?" active":""}">${$(T,true)}</div>`+D.map(e=>`<div class="tab-panel${g===e?" active":""}">${$(L[e],false)}</div>`).join(""),document.getElementById("footer-note").innerHTML=`Pricing: claude.com/pricing (as of 2026-05) &nbsp;·&nbsp;
      Cache Hit% = reads ÷ (reads + writes) &nbsp;·&nbsp;
      Bars are relative to the top key in each tab &nbsp;·&nbsp;
-     Web search: $0.01/search &nbsp;·&nbsp; geo=us adds 10% to token cost`;
+     Web search: $0.01/search &nbsp;·&nbsp; geo=us adds 10% to token cost`,S.querySelectorAll(".tab").forEach(e=>{e.addEventListener("click",()=>{p.activeTab=e.dataset.tab,b()})})}function w(n){let c=new FileReader;c.onload=c=>{let l=function(n){let c=n.replace(/\r\n/g,"\n").replace(/\r/g,"\n").trim().split("\n");if(c.length<2)return[];function l(e){let t=[],a="",s=false;for(let n=0;n<e.length;n++){let c=e[n];'"'===c?s&&'"'===e[n+1]?(a+='"',n++):s=!s:","!==c||s?a+=c:(t.push(a.trim()),a="")}return t.push(a.trim()),t}let o=l(c[0]);return c.slice(1).filter(e=>e.trim()).map(n=>{let c=l(n),r={};return o.forEach((e,t)=>{r[e.trim()]=(c[t]||"").trim()}),r._cost=function(n){let c,l,o,r,d,i,u,p,h=(l=(c=(n.model_version||"").toLowerCase()).includes("opus"),o=c.includes("sonnet"),r=c.includes("haiku"),i=(d=c.match(/(?:opus|sonnet|haiku)[_-](\d+)(?:[_-](\d{1,2})(?=[_-]|$))?/))?+d[1]:0,u=d?+(d[2]??0):0,l?4===i&&u<=1?"opus-4-old":"opus-4x":o?"sonnet-4x":r?i<=3?"haiku-3-5":"haiku-4-5":"sonnet-4x"),m=(n.usage_type||"").toLowerCase(),v=(n.speed||"").toLowerCase().trim(),g=(n.inference_geo||"").toLowerCase();if("fast"===v){let t=function(e){let t=e.toLowerCase();if(!t.includes("opus"))return null;let a=t.match(/opus[_-](\d+)(?:[_-](\d{1,2})(?=[_-]|$))?/);if(!a)return null;let s=a[2]?+a[2]:0;return 6===s?"opus-4-6":7===s?"opus-4-7":null}(n.model_version||"");p=t&&a[t]?a[t]:e[h]}else p="batch"===m?t[h]||t["sonnet-4x"]:e[h]||e["sonnet-4x"];let _=s(n.usage_input_tokens_no_cache),$=s(n.usage_input_tokens_cache_write_5m),f=s(n.usage_input_tokens_cache_write_1h),b=s(n.usage_input_tokens_cache_read),w=s(n.usage_output_tokens),y=s(n.web_search_count),k=(_*p[0]+$*p[1]+f*p[2]+b*p[3]+w*p[4])/1e6;return("us"===g?1.1*k:k)+.01*y}(r),r})}(c.target.result);if(!l.length)return void alert("No data rows found in this CSV.");let o=l[0].workspace||"",r=[...new Set(l.map(e=>(e.usage_date_utc||"").trim()))].filter(Boolean).sort(),d=r.length?i(r[r.length-1]):new Date;p={rows:l,workspace:o,allDates:r,filterMode:"all",filterDate:d,activeTab:"all",sortCol:"_total",sortDir:"desc",keyFilter:""},document.getElementById("keySearch").value="";let u=r.length>1?`${r[0]} → ${r[r.length-1]}`:r[0]||"—";document.getElementById("report-subtitle").textContent=`${o}  ·  ${u}  ·  ${n.name}  ·  Loaded ${new Date().toLocaleString()}`,document.querySelector(".drop-title").textContent=n.name,document.querySelector(".drop-hint").innerHTML='Drop a new file or <strong id="browse-btn">click to change</strong>',document.getElementById("drop-zone").classList.add("minimized"),document.getElementById("report").hidden=false,b()},c.readAsText(n)}
 
-  // ── Tab click events
-  tabsEl.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.activeTab = btn.dataset.tab;
-      render();
+window.setSortCol = function(col) {
+    if(p.sortCol===col) p.sortDir="asc"===p.sortDir?"desc":"asc";
+    else{p.sortCol=col;p.sortDir="desc";}
+    b();
+};
+
+document.addEventListener("DOMContentLoaded",function(){
+    let e=document.getElementById("drop-card");
+    function t(e){let t=new Date(p.filterDate),{filterMode:a}=p;"month"===a?t.setUTCMonth(t.getUTCMonth()+e):"week"===a?t.setUTCDate(t.getUTCDate()+7*e):"day"===a&&t.setUTCDate(t.getUTCDate()+e),p.filterDate=t,b()}
+    e.addEventListener("click",()=>document.getElementById("file-input").click());
+    document.getElementById("browse-btn").addEventListener("click",e=>{e.stopPropagation(),document.getElementById("file-input").click()});
+    document.getElementById("file-input").addEventListener("change",e=>{e.target.files[0]&&w(e.target.files[0])});
+    e.addEventListener("dragover",t=>{t.preventDefault(),e.classList.add("drag-over")});
+    e.addEventListener("dragleave",()=>e.classList.remove("drag-over"));
+    e.addEventListener("drop",t=>{t.preventDefault(),e.classList.remove("drag-over"),t.dataTransfer.files[0]&&w(t.dataTransfer.files[0])});
+    document.getElementById("btn-reset").addEventListener("click",()=>{
+        document.querySelector(".drop-title").textContent="Drop your CSV here";
+        document.querySelector(".drop-hint").innerHTML='Drag &amp; drop a Claude API token export, or <strong id="browse-btn">click to change</strong>';
+        document.getElementById("drop-zone").classList.remove("minimized");
+        document.getElementById("report").hidden=true;
+        document.getElementById("file-input").value="";
+        document.getElementById("browse-btn").addEventListener("click",e=>{e.stopPropagation(),document.getElementById("file-input").click()});
     });
-  });
+    document.querySelectorAll(".btn-period").forEach(e=>{e.addEventListener("click",()=>{
+        document.querySelectorAll(".btn-period").forEach(e=>e.classList.remove("active"));
+        e.classList.add("active");
+        p.filterMode=e.dataset.period;
+        p.activeTab="all";
+        let{allDates:t}=p;
+        t.length&&"all"!==p.filterMode&&(p.filterDate=i(t[t.length-1]));
+        b();
+    })});
+    document.getElementById("btn-prev").addEventListener("click",()=>t(-1));
+    document.getElementById("btn-next").addEventListener("click",()=>t(1));
+    document.getElementById("keySearch").addEventListener("input",e=>{p.keyFilter=e.target.value.trim(),b()});
+});
+
+function toggleDevMenu() {
+    document.getElementById('dev-menu').classList.toggle('active');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// FILE LOADING
-// ═══════════════════════════════════════════════════════════════════════════
-function loadFile(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    const rows = parseCSV(e.target.result);
-    if (!rows.length) { alert('No data rows found in this CSV.'); return; }
+function copyAIPrompt() {
+    const prompt = `# Specification: Claude API Usage
 
-    const workspace = rows[0].workspace || '';
-    const allDates  = [...new Set(rows.map(r => (r.usage_date_utc || '').trim()))].filter(Boolean).sort();
-    const lastDate  = allDates.length ? parseDate(allDates[allDates.length - 1]) : new Date();
+## Metadata
+- **Tool Name**: Claude API Usage
+- **Version**: 1.0.0
+- **Status**: Active
 
-    state = { rows, workspace, allDates, filterMode: 'all', filterDate: lastDate, activeTab: 'all', sortCol: '_total', sortDir: 'desc', keyFilter: '' };
-    document.getElementById('keySearch').value = '';
+## Description
+A single-file CSV visualizer for Claude API token usage exports from console.anthropic.com. Drop in a CSV and get an interactive breakdown of cost, token consumption, and cache efficiency — by API key and model.
 
-    const dateRange = allDates.length > 1
-      ? `${allDates[0]} → ${allDates[allDates.length - 1]}`
-      : allDates[0] || '—';
+## Features
+- **Drag-and-drop CSV loading**: Drop or browse to load a Claude API usage export CSV.
+- **Summary cards**: Est. cost, total tokens, input, cache writes/reads, cache hit rate, output, web searches, key count, model count.
+- **Period filter**: All / Month / Week / Day with prev/next navigation.
+- **API key search**: Live filter rows by key name.
+- **Tabbed model breakdown**: All-models tab plus per-model tabs with token counts.
+- **Sortable table**: Click any column header to sort; bars show relative token volume.
+- **Cost estimation**: Prices per model tier with batch/fast/geo-us modifiers.
+- **Developer Menu**: Standard Scalopus developer utilities.
 
-    document.getElementById('report-subtitle').textContent =
-      `${workspace}  ·  ${dateRange}  ·  ${file.name}  ·  Loaded ${new Date().toLocaleString()}`;
+## Technical Stack
+- **HTML5/CSS3/JS (Vanilla)**: Single self-contained file, no external dependencies.
+- **CSV parsing**: Hand-rolled parser handling quoted fields.
 
-    document.querySelector('.drop-title').textContent = file.name;
-    document.querySelector('.drop-hint').innerHTML = 'Drop a new file or <strong id="browse-btn">click to change</strong>';
-    document.getElementById('drop-zone').classList.add('minimized');
-    document.getElementById('report').hidden = false;
-    render();
-  };
-  reader.readAsText(file);
+## Future AI Prompt
+"Create a single-file HTML tool that accepts a drag-and-drop CSV export from the Anthropic console. Parse it client-side, show summary cards for cost/tokens/cache, and render a sortable table broken down by API key and model with period filtering. Include a home link at bottom-left and a developer menu at bottom-right."`;
+    navigator.clipboard.writeText(prompt).then(() => {
+        alert('Specification copied to clipboard!');
+        toggleDevMenu();
+    });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// EVENTS
-// ═══════════════════════════════════════════════════════════════════════════
-const dropCard = document.getElementById('drop-card');
-
-dropCard.addEventListener('click', () => document.getElementById('file-input').click());
-document.getElementById('browse-btn').addEventListener('click', e => {
-  e.stopPropagation();
-  document.getElementById('file-input').click();
-});
-document.getElementById('file-input').addEventListener('change', e => {
-  if (e.target.files[0]) loadFile(e.target.files[0]);
-});
-dropCard.addEventListener('dragover', e => { e.preventDefault(); dropCard.classList.add('drag-over'); });
-dropCard.addEventListener('dragleave', () => dropCard.classList.remove('drag-over'));
-dropCard.addEventListener('drop', e => {
-  e.preventDefault();
-  dropCard.classList.remove('drag-over');
-  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
-});
-
-document.getElementById('btn-reset').addEventListener('click', () => {
-  document.querySelector('.drop-title').textContent = 'Drop your CSV here';
-  document.querySelector('.drop-hint').innerHTML = 'Drag &amp; drop a Claude API token export, or <strong id="browse-btn">browse to select</strong>';
-  document.getElementById('drop-zone').classList.remove('minimized');
-  document.getElementById('report').hidden = true;
-  document.getElementById('file-input').value = '';
-  // Re-attach browse-btn listener since innerHTML was replaced
-  document.getElementById('browse-btn').addEventListener('click', e => {
-    e.stopPropagation();
-    document.getElementById('file-input').click();
-  });
-});
-
-document.querySelectorAll('.btn-period').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.btn-period').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    state.filterMode = btn.dataset.period;
-    state.activeTab  = 'all';
-    // Reset filterDate to most recent relevant period
-    const { allDates } = state;
-    if (allDates.length && state.filterMode !== 'all') {
-      state.filterDate = parseDate(allDates[allDates.length - 1]);
+window.addEventListener('click', (e) => {
+    const menu = document.getElementById('dev-menu');
+    const devBtn = document.getElementById('dev-btn');
+    if (menu.classList.contains('active') && !menu.contains(e.target) && e.target !== devBtn) {
+        menu.classList.remove('active');
     }
-    render();
-  });
-});
-
-function movePeriod(dir) {
-  const d = new Date(state.filterDate);
-  const { filterMode } = state;
-  if      (filterMode === 'month') d.setUTCMonth(d.getUTCMonth() + dir);
-  else if (filterMode === 'week')  d.setUTCDate(d.getUTCDate() + dir * 7);
-  else if (filterMode === 'day')   d.setUTCDate(d.getUTCDate() + dir);
-  state.filterDate = d;
-  render();
-}
-
-document.getElementById('btn-prev').addEventListener('click', () => movePeriod(-1));
-document.getElementById('btn-next').addEventListener('click', () => movePeriod(1));
-
-document.getElementById('keySearch').addEventListener('input', e => {
-  state.keyFilter = e.target.value.trim();
-  render();
 });
 </script>
 </body>
