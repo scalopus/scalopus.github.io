@@ -1,0 +1,1252 @@
+<!--
+    Application: Meetup Chat (P2P)
+    Version: 1.1.0
+    Created: 2026-06-27
+    Model: Claude Sonnet 4.6
+    Description: P2P meetup chat with host projector view, voting, moderator controls, delete/ban, and URL auto-linking using WebRTC (PeerJS).
+    Specification: specs/meetup-chat-spec.md
+-->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แชทมีทอัพ | Scalopus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg: #0b0b0b;
+            --card: #1a1a1a;
+            --card2: #222;
+            --accent: #0070f3;
+            --text: #ffffff;
+            --muted: rgba(255,255,255,0.5);
+            --border: #2a2a2a;
+            --danger: #ff4d4d;
+            --success: #22c55e;
+            --dev-bg: #1a1a1a;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%; height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        button { cursor: pointer; font-family: inherit; }
+
+        /* ── JOIN SCREEN ── */
+        #join-screen {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 24px;
+        }
+
+        .join-box {
+            background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+            padding: 36px 32px; width: 100%; max-width: 420px; display: flex;
+            flex-direction: column; gap: 20px;
+        }
+
+        .join-title {
+            font-size: 1.5rem; font-weight: 700; letter-spacing: 1.5px; text-align: center;
+        }
+
+        .join-title span { color: var(--accent); }
+
+        .join-label {
+            font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;
+        }
+
+        .join-input {
+            width: 100%; background: var(--card2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 1rem; padding: 10px 14px;
+            font-family: inherit; outline: none; transition: border-color 0.2s;
+        }
+        .join-input:focus { border-color: var(--accent); }
+
+        .tag-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+        }
+
+        .tag-pill {
+            background: var(--card2); border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); font-size: 0.8rem; padding: 8px 6px; text-align: center;
+            transition: all 0.15s; display: flex; flex-direction: column;
+            align-items: center; gap: 4px;
+        }
+        .tag-pill:hover { border-color: var(--accent); }
+        .tag-pill.active { background: var(--accent); border-color: var(--accent); color: white; }
+        .tag-pill .tag-icon { font-size: 1.2rem; }
+        .tag-pill .tag-label { font-size: 0.7rem; }
+
+        .join-btn {
+            background: var(--accent); color: white; border: none; border-radius: 8px;
+            padding: 12px; font-size: 1rem; font-weight: 600; width: 100%;
+            transition: background 0.2s, opacity 0.2s;
+        }
+        .join-btn:hover:not(:disabled) { background: #0060d0; }
+        .join-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .join-room-info {
+            font-size: 0.75rem; color: var(--muted); text-align: center;
+        }
+
+        /* ── APP SCREEN ── */
+        #app-screen {
+            display: none; flex-direction: column; height: 100vh; overflow: hidden;
+        }
+
+        #app-header {
+            padding: 12px 16px; background: rgba(255,255,255,0.04);
+            backdrop-filter: blur(10px); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+        }
+
+        .app-title { font-weight: 700; letter-spacing: 1px; font-size: 0.95rem; flex-shrink: 0; }
+
+        .room-badge {
+            background: var(--accent); color: white; padding: 4px 10px;
+            border-radius: 20px; font-size: 0.7rem; font-weight: bold;
+            letter-spacing: 0.5px; cursor: pointer; border: none; white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .role-badge {
+            font-size: 0.65rem; font-weight: 700; padding: 3px 8px; border-radius: 12px;
+            letter-spacing: 0.5px; flex-shrink: 0;
+        }
+        .role-badge.host { background: #f59e0b; color: black; }
+        .role-badge.mod { background: var(--success); color: black; }
+
+        .header-name-edit {
+            display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.08);
+            border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+            flex: 1; min-width: 0; max-width: 260px;
+        }
+        .header-name-edit input {
+            background: transparent; border: none; color: var(--text); font-size: 0.82rem;
+            outline: none; flex: 1; min-width: 0; font-family: inherit;
+        }
+        .header-tag-select {
+            background: transparent; border: none; font-size: 1rem; cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .icon-btn {
+            background: rgba(255,255,255,0.08); border: 1px solid var(--border);
+            border-radius: 6px; color: var(--text); padding: 5px 8px; font-size: 0.85rem;
+            transition: background 0.15s; flex-shrink: 0;
+        }
+        .icon-btn:hover { background: rgba(255,255,255,0.15); }
+
+        .proj-btn {
+            background: #f59e0b; color: black; border: none; border-radius: 6px;
+            padding: 5px 10px; font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+            transition: background 0.15s;
+        }
+        .proj-btn:hover { background: #d97706; }
+
+        .header-spacer { flex: 1; }
+
+        #chat-list {
+            flex: 1; overflow-y: auto; padding: 0;
+            display: flex; flex-direction: column; gap: 0;
+        }
+        #chat-list::-webkit-scrollbar { width: 4px; }
+        #chat-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .msg {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            background: transparent; animation: fadeIn 0.15s ease;
+            min-width: 0;
+        }
+        .msg:hover { background: rgba(255,255,255,0.03); }
+        .msg.pinned { border-left: 3px solid var(--accent); padding-left: 13px; }
+        .msg.done { opacity: 0.4; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .msg-time {
+            font-size: 0.68rem; color: var(--muted); flex-shrink: 0;
+            font-variant-numeric: tabular-nums; width: 36px; text-align: right;
+        }
+        .msg-sender-inline {
+            font-size: 0.85rem; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+            max-width: 140px; overflow: hidden; text-overflow: ellipsis;
+        }
+        .msg-sender-inline .clickable-name { cursor: pointer; transition: color 0.15s; }
+        .msg-sender-inline .clickable-name:hover { color: var(--accent); }
+        .msg-tag-inline { font-size: 0.95rem; flex-shrink: 0; line-height: 1; }
+        .msg-colon { color: var(--muted); flex-shrink: 0; margin: 0 2px; font-size: 0.85rem; }
+        .msg-text-inline {
+            font-size: 0.88rem; flex: 1; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            color: rgba(255,255,255,0.9);
+        }
+        .msg-actions {
+            display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+        }
+
+        .vote-btn {
+            background: transparent; border: 1px solid transparent;
+            border-radius: 5px; color: var(--muted); font-size: 0.72rem;
+            padding: 2px 6px; transition: all 0.15s; white-space: nowrap;
+        }
+        .vote-btn:hover:not(.voted):not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(0,112,243,0.1); }
+        .vote-btn.voted { color: var(--accent); cursor: default; font-weight: 600; }
+
+        .action-mini-btn {
+            background: transparent; border: 1px solid transparent; border-radius: 5px;
+            color: var(--muted); font-size: 0.7rem; padding: 2px 5px; transition: all 0.15s;
+        }
+        .action-mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .action-mini-btn.done-btn:hover { border-color: var(--success); color: var(--success); }
+
+        #chat-input-bar {
+            padding: 12px 16px 64px; background: rgba(255,255,255,0.04);
+            border-top: 1px solid var(--border); display: flex; gap: 10px;
+            flex-shrink: 0; align-items: flex-end;
+        }
+
+        #chat-textarea {
+            flex: 1; background: var(--card); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 0.9rem; padding: 10px 12px;
+            font-family: inherit; outline: none; resize: none; min-height: 42px; max-height: 120px;
+            transition: border-color 0.2s; line-height: 1.4;
+        }
+        #chat-textarea:focus { border-color: var(--accent); }
+
+        #send-btn {
+            background: var(--accent); color: white; border: none; border-radius: 8px;
+            padding: 10px 16px; font-size: 0.9rem; font-weight: 600; transition: background 0.2s;
+            flex-shrink: 0; align-self: flex-end;
+        }
+        #send-btn:hover { background: #0060d0; }
+
+        /* ── PROJECTOR SCREEN ── */
+        #projector-screen {
+            display: none; flex-direction: column; height: 100vh; overflow: hidden;
+            background: var(--bg); position: relative;
+        }
+
+        #proj-header {
+            padding: 14px 20px; background: rgba(255,255,255,0.04);
+            border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px;
+            flex-shrink: 0;
+        }
+
+        .proj-title { font-size: 1.1rem; font-weight: 700; letter-spacing: 1.5px; flex: 1; }
+        .proj-room-badge {
+            background: var(--accent); color: white; padding: 4px 12px;
+            border-radius: 20px; font-size: 0.75rem; font-weight: bold;
+        }
+
+        .proj-exit-btn {
+            background: var(--card2); color: var(--text); border: 1px solid var(--border);
+            border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; font-weight: 600;
+            transition: background 0.15s;
+        }
+        .proj-exit-btn:hover { background: #333; }
+
+        #proj-split {
+            flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden;
+        }
+
+        .proj-panel {
+            display: flex; flex-direction: column; overflow: hidden;
+            border-right: 1px solid var(--border);
+        }
+        .proj-panel:last-child { border-right: none; }
+
+        .proj-panel-header {
+            padding: 12px 20px; background: rgba(255,255,255,0.04);
+            border-bottom: 1px solid var(--border); font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        #proj-top-questions {
+            flex: 1; overflow-y: auto; padding: 14px 18px;
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        #proj-top-questions::-webkit-scrollbar { width: 4px; }
+        #proj-top-questions::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .top-q-item {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px 16px; display: flex; align-items: flex-start; gap: 12px;
+            transition: opacity 0.3s;
+        }
+        .top-q-item.done { opacity: 0.35; }
+        .top-q-item.done .tq-text { text-decoration: line-through; }
+
+        .tq-rank {
+            font-size: 2.8rem; font-weight: 700; color: var(--accent); flex-shrink: 0;
+            min-width: 56px; text-align: center; line-height: 1;
+        }
+        .tq-body { flex: 1; min-width: 0; }
+        .tq-sender { font-size: 1.5rem; color: var(--muted); margin-bottom: 6px; }
+        .tq-text { font-size: 2.1rem; line-height: 1.4; word-break: break-word; }
+        .tq-vote { font-size: 1.5rem; color: var(--muted); margin-top: 6px; }
+
+        .tq-done-btn {
+            background: transparent; border: 1px solid var(--border); border-radius: 6px;
+            color: var(--muted); font-size: 1.2rem; padding: 8px 14px; flex-shrink: 0;
+            transition: all 0.15s;
+        }
+        .tq-done-btn:hover { border-color: var(--success); color: var(--success); }
+
+        #proj-chat-stream {
+            flex: 1; overflow-y: auto; padding: 0;
+            display: flex; flex-direction: column; gap: 0;
+        }
+        #proj-chat-stream::-webkit-scrollbar { width: 4px; }
+        #proj-chat-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .proj-stream-msg {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            min-width: 0; animation: fadeIn 0.15s ease;
+        }
+        .proj-stream-msg:hover { background: rgba(255,255,255,0.03); }
+        .proj-stream-time { font-size: 0.72rem; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; width: 38px; text-align: right; }
+        .proj-stream-sender { font-size: 0.9rem; font-weight: 600; flex-shrink: 0; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+        .proj-stream-sender .clickable-name { cursor: pointer; }
+        .proj-stream-sender .clickable-name:hover { color: var(--accent); }
+        .proj-stream-text { font-size: 0.9rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255,255,255,0.9); }
+
+        /* QR corner in projector */
+        #proj-qr-corner {
+            position: absolute; bottom: 18px; right: 18px;
+            background: white; padding: 18px; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 10;
+        }
+        #proj-qr-corner canvas, #proj-qr-corner img { display: block; }
+        .proj-qr-label {
+            font-size: 0.6rem; color: #333; font-weight: 700; text-align: center;
+            letter-spacing: 0.5px; text-transform: uppercase;
+        }
+
+        /* ── QR MODAL ── */
+        #qr-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        #qr-modal.active { display: flex; }
+        .qr-container {
+            background: white; padding: 24px; border-radius: 12px;
+            text-align: center; color: black; max-width: 90%;
+        }
+        .qr-container h3 { margin-bottom: 4px; font-size: 1rem; }
+        .qr-container p { font-size: 0.7rem; color: #666; margin-bottom: 12px; }
+        #qr-code { margin: 0 auto 12px; }
+        #qr-url { font-size: 0.7rem; color: #555; margin-bottom: 12px; word-break: break-all; }
+        .qr-close {
+            background: #333; color: white; border: none; padding: 8px 20px;
+            border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+        }
+
+        /* ── DEV MENU ── */
+        .bottom-icon {
+            position: fixed; bottom: 20px; font-size: 1.5rem; cursor: pointer;
+            opacity: 0.5; transition: opacity 0.3s, transform 0.2s; z-index: 100;
+            background: none; border: none; color: white; text-decoration: none;
+        }
+        .bottom-icon:hover { opacity: 1; transform: scale(1.1); }
+        #home-link { left: 20px; }
+        #dev-btn { right: 20px; }
+
+        #dev-menu {
+            position: fixed; bottom: 60px; right: 20px; background: var(--dev-bg);
+            border: 1px solid var(--border); border-radius: 8px; padding: 15px;
+            display: none; flex-direction: column; gap: 10px; width: 250px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 101;
+        }
+        #dev-menu.active { display: flex; }
+        .dev-label { font-weight: 600; color: #666; font-size: 0.7rem; text-transform: uppercase; }
+        .dev-item {
+            font-size: 0.85rem; color: #ccc; text-decoration: none; padding: 8px;
+            border-radius: 4px; display: flex; align-items: center; gap: 10px; cursor: pointer;
+            border: none; background: none; width: 100%; text-align: left; font-family: inherit;
+        }
+        .dev-item:hover { background: #2a2a2a; color: white; }
+
+        /* ── EMPTY STATE ── */
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            flex: 1; color: var(--muted); gap: 8px; padding: 40px;
+        }
+        .empty-state-icon { font-size: 2.5rem; }
+        .empty-state-text { font-size: 0.85rem; text-align: center; }
+
+        /* ── MOBILE ── */
+        @media (max-width: 768px) {
+            .bottom-icon { position: relative; bottom: auto; left: auto; right: auto; opacity: 0.8; padding: 4px; font-size: 1.2rem; }
+            .desktop-only { display: none !important; }
+            .mobile-nav { display: flex !important; gap: 4px; }
+            #proj-split { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+            .proj-panel { border-right: none; border-bottom: 1px solid var(--border); }
+            .proj-panel:last-child { border-bottom: none; }
+            #proj-qr-corner { display: none; }
+            #chat-input-bar { padding-bottom: env(safe-area-inset-bottom, 12px); }
+        }
+
+        .mobile-nav { display: none; }
+    </style>
+</head>
+<body>
+
+<!-- ── JOIN SCREEN ── -->
+<div id="join-screen">
+    <div class="join-box">
+        <div class="join-title">💬 <span>แชท</span>มีทอัพ</div>
+
+        <div>
+            <div class="join-label">ชื่อของคุณ</div>
+            <input type="text" id="join-name" class="join-input" placeholder="ใส่ชื่อของคุณ..." maxlength="30" oninput="checkJoinReady()">
+        </div>
+
+        <div>
+            <div class="join-label">แท็กของคุณ</div>
+            <div class="tag-grid" id="tag-grid">
+                <button class="tag-pill" data-tag="qa" onclick="selectTag(this)">
+                    <span class="tag-icon">🔍</span>
+                    <span class="tag-label">QA</span>
+                </button>
+                <button class="tag-pill" data-tag="dev" onclick="selectTag(this)">
+                    <span class="tag-icon">💻</span>
+                    <span class="tag-label">Dev</span>
+                </button>
+                <button class="tag-pill" data-tag="single" onclick="selectTag(this)">
+                    <span class="tag-icon">❤️</span>
+                    <span class="tag-label">โสด</span>
+                </button>
+                <button class="tag-pill" data-tag="findjob" onclick="selectTag(this)">
+                    <span class="tag-icon">🎯</span>
+                    <span class="tag-label">หางาน</span>
+                </button>
+                <button class="tag-pill" data-tag="findpeople" onclick="selectTag(this)">
+                    <span class="tag-icon">🤝</span>
+                    <span class="tag-label">หาคน</span>
+                </button>
+                <button class="tag-pill" data-tag="other" onclick="selectTag(this)">
+                    <span class="tag-icon">🌟</span>
+                    <span class="tag-label">อื่นๆ</span>
+                </button>
+            </div>
+        </div>
+
+        <button class="join-btn" id="join-btn" onclick="joinRoom()" disabled>เข้าร่วม</button>
+        <div class="join-room-info" id="join-room-info">ห้อง: กำลังเชื่อมต่อ...</div>
+    </div>
+</div>
+
+<!-- ── APP SCREEN ── -->
+<div id="app-screen">
+    <div id="app-header">
+        <div class="app-title">
+            💬 แชทมีทอัพ
+            <div class="mobile-nav" style="display:none; align-items:center;">
+                <a href="index.html" class="bottom-icon" title="หน้าหลัก">🏠</a>
+                <button class="bottom-icon" onclick="toggleDevMenu()" title="Dev">🛠️</button>
+            </div>
+        </div>
+        <div id="room-badge" class="room-badge" onclick="copyRoomLink()">กำลังเชื่อมต่อ...</div>
+        <span id="role-badge" class="role-badge" style="display:none;"></span>
+        <div class="header-name-edit">
+            <button id="header-tag-btn" class="header-tag-select" onclick="openTagPicker()" title="เปลี่ยนแท็ก">❓</button>
+            <input type="text" id="header-name" maxlength="30" placeholder="ชื่อของคุณ..." oninput="updateMyNameTag()">
+        </div>
+        <button class="icon-btn" onclick="showQR()" title="แสดง QR Code">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/></svg>
+        </button>
+        <button id="proj-mode-btn" class="proj-btn" onclick="toggleProjectorMode()" style="display:none;">📽 จอโปรเจกเตอร์</button>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div id="chat-list">
+        <div class="empty-state">
+            <div class="empty-state-icon">💬</div>
+            <div class="empty-state-text">ยังไม่มีข้อความ พูดอะไรสักอย่างสิ!</div>
+        </div>
+    </div>
+
+    <div id="chat-input-bar">
+        <textarea id="chat-textarea" placeholder="พิมพ์ข้อความ..." rows="1"
+            onkeydown="handleTextareaKey(event)" oninput="autoResizeTextarea(this)"></textarea>
+        <button id="send-btn" onclick="sendChat()">ส่ง</button>
+    </div>
+</div>
+
+<!-- ── PROJECTOR SCREEN ── -->
+<div id="projector-screen">
+    <div id="proj-header">
+        <div class="proj-title">💬 แชทมีทอัพ</div>
+        <div id="proj-room-badge" class="proj-room-badge">ROOM: —</div>
+        <button class="proj-exit-btn" onclick="exitProjectorMode()">✕ ออก</button>
+    </div>
+
+    <div id="proj-split">
+        <div class="proj-panel">
+            <div class="proj-panel-header">🏆 คำถามยอดนิยม</div>
+            <div id="proj-top-questions">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📌</div>
+                    <div class="empty-state-text">คำถามที่ปักหมุดจะปรากฏที่นี่</div>
+                </div>
+            </div>
+        </div>
+        <div class="proj-panel">
+            <div class="proj-panel-header">💬 แชทสด</div>
+            <div id="proj-chat-stream">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <div class="empty-state-text">ข้อความสดจะปรากฏที่นี่</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="proj-qr-corner">
+        <div id="proj-qr-code"></div>
+        <div class="proj-qr-label">สแกนเพื่อเข้าร่วม</div>
+    </div>
+</div>
+
+<!-- ── QR MODAL ── -->
+<div id="qr-modal" onclick="hideQR(event)">
+    <div class="qr-container" onclick="event.stopPropagation()">
+        <h3>สแกนเพื่อเข้าร่วม</h3>
+        <p>แชร์ QR นี้ให้ผู้เข้าร่วม</p>
+        <div id="qr-code"></div>
+        <div id="qr-url"></div>
+        <button class="qr-close" onclick="hideQR()">ปิด</button>
+    </div>
+</div>
+
+<!-- ── TAG PICKER MODAL ── -->
+<div id="tag-modal" onclick="hideTagPicker(event)"
+    style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);
+           backdrop-filter:blur(5px);display:none;justify-content:center;align-items:center;z-index:1000;">
+    <div onclick="event.stopPropagation()"
+        style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;width:300px;max-width:90%;">
+        <div style="font-weight:700;margin-bottom:16px;font-size:1rem;">เปลี่ยนแท็กของคุณ</div>
+        <div class="tag-grid" id="modal-tag-grid">
+            <button class="tag-pill" data-tag="qa" onclick="selectModalTag(this)">
+                <span class="tag-icon">🔍</span><span class="tag-label">QA</span>
+            </button>
+            <button class="tag-pill" data-tag="dev" onclick="selectModalTag(this)">
+                <span class="tag-icon">💻</span><span class="tag-label">Dev</span>
+            </button>
+            <button class="tag-pill" data-tag="single" onclick="selectModalTag(this)">
+                <span class="tag-icon">❤️</span><span class="tag-label">โสด</span>
+            </button>
+            <button class="tag-pill" data-tag="findjob" onclick="selectModalTag(this)">
+                <span class="tag-icon">🎯</span><span class="tag-label">หางาน</span>
+            </button>
+            <button class="tag-pill" data-tag="findpeople" onclick="selectModalTag(this)">
+                <span class="tag-icon">🤝</span><span class="tag-label">หาคน</span>
+            </button>
+            <button class="tag-pill" data-tag="other" onclick="selectModalTag(this)">
+                <span class="tag-icon">🌟</span><span class="tag-label">อื่นๆ</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── NAME ACTION MENU ── -->
+<div id="name-menu" style="position:fixed; background:var(--card); border:1px solid var(--border);
+     border-radius:8px; padding:6px; display:none; z-index:600; box-shadow:0 4px 16px rgba(0,0,0,0.5); min-width:190px;">
+    <button class="dev-item" id="nm-assign" onclick="doAssignModerator()">👑 แต่งตั้งเป็นผู้ดูแล</button>
+    <button class="dev-item" id="nm-ban" onclick="doBanUser()">🚫 แบนผู้ใช้</button>
+</div>
+
+<a href="index.html" id="home-link" class="bottom-icon desktop-only">🏠</a>
+<button id="dev-btn" class="bottom-icon desktop-only" onclick="toggleDevMenu()">🛠️</button>
+
+<div id="dev-menu">
+    <div class="dev-label">Developer Options</div>
+    <a href="https://github.com/scalopus/scalopus.github.io/blob/main/src/meetup-chat.html"
+       target="_blank" class="dev-item"><span>📂</span> View Source Code</a>
+    <button class="dev-item" onclick="copyAIPrompt()"><span>🤖</span> AI Prompt</button>
+    <div class="dev-label">Tool Information</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Version: 1.1.0</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Created: 2026-06-27</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Model: Claude Sonnet 4.6</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Protocol: WebRTC (PeerJS)</div>
+</div>
+
+<script>
+    // ── CONSTANTS ──
+    const TAG_META = {
+        qa:          { icon: '🔍', label: 'QA' },
+        dev:         { icon: '💻', label: 'Dev' },
+        single:      { icon: '❤️', label: 'โสด' },
+        findjob:     { icon: '🎯', label: 'หางาน' },
+        findpeople:  { icon: '🤝', label: 'หาคน' },
+        other:       { icon: '🌟', label: 'อื่นๆ' },
+    };
+
+    // ── ROOM SETUP ──
+    const roomId = window.location.hash.substring(1) || Math.random().toString(36).substring(2, 8);
+    window.location.hash = roomId;
+    const hostPeerId = `scalopus-chat-${roomId}-host`;
+
+    // ── STATE ──
+    let myId = null;
+    let myName = localStorage.getItem('meetupChatName') || '';
+    let myTag  = localStorage.getItem('meetupChatTag')  || '';
+    let peer = null;
+    const connections = {};
+    const peers = {};       // peerId -> { name, tag }
+    const messages = {};    // msgId  -> { id, senderId, senderName, senderTag, text, votes:{}, pinned, done, timestamp }
+    let pinnedOrder = [];
+    let currentModeratorId = null;
+    let isHost      = false;
+    let isModerator = false;
+    let projectorOpen = false;
+    let targetMenuPeerId = null;
+
+    // ── JOIN SCREEN ──
+    function init() {
+        document.getElementById('join-room-info').textContent = `ห้อง: ${roomId}`;
+        if (myName) document.getElementById('join-name').value = myName;
+        if (myTag) {
+            const pill = document.querySelector(`#tag-grid .tag-pill[data-tag="${myTag}"]`);
+            if (pill) pill.classList.add('active');
+        }
+        checkJoinReady();
+    }
+
+    function selectTag(el) {
+        document.querySelectorAll('#tag-grid .tag-pill').forEach(p => p.classList.remove('active'));
+        el.classList.add('active');
+        myTag = el.dataset.tag;
+        checkJoinReady();
+    }
+
+    function checkJoinReady() {
+        const name = document.getElementById('join-name').value.trim();
+        document.getElementById('join-btn').disabled = !(name && myTag);
+    }
+
+    function joinRoom() {
+        myName = document.getElementById('join-name').value.trim();
+        if (!myName || !myTag) return;
+        localStorage.setItem('meetupChatName', myName);
+        localStorage.setItem('meetupChatTag', myTag);
+
+        document.getElementById('join-screen').style.display = 'none';
+        document.getElementById('app-screen').style.display = 'flex';
+        document.getElementById('header-name').value = myName;
+        document.getElementById('header-tag-btn').textContent = TAG_META[myTag]?.icon || '❓';
+
+        startPeer(hostPeerId);
+    }
+
+    // ── WEBRTC ──
+    function startPeer(requestedId) {
+        peer = new Peer(requestedId);
+
+        peer.on('open', (id) => {
+            myId = id;
+            isHost = (id === hostPeerId);
+
+            const badge = document.getElementById('room-badge');
+            badge.textContent = `ROOM: ${roomId} (${isHost ? 'HOST' : 'Client'})`;
+
+            if (isHost) {
+                const rb = document.getElementById('role-badge');
+                rb.textContent = 'HOST';
+                rb.className = 'role-badge host';
+                rb.style.display = '';
+                document.getElementById('proj-mode-btn').style.display = '';
+                document.getElementById('proj-room-badge').textContent = `ROOM: ${roomId}`;
+                toggleProjectorMode();
+            } else {
+                connectToHost();
+            }
+
+            // Add self to peers
+            peers[myId] = { name: myName, tag: myTag };
+        });
+
+        peer.on('connection', (conn) => setupConnection(conn));
+
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id' && requestedId === hostPeerId) {
+                startPeer(null);
+            } else {
+                console.error('Peer error:', err);
+            }
+        });
+    }
+
+    function connectToHost() {
+        const conn = peer.connect(hostPeerId);
+        setupConnection(conn);
+    }
+
+    function setupConnection(conn) {
+        conn.on('open', () => {
+            connections[conn.peer] = conn;
+            conn.send({ type: 'init', fromId: myId, name: myName, tag: myTag });
+        });
+
+        conn.on('data', (data) => {
+            const senderId = data.fromId || conn.peer;
+            handleMessage(senderId, data);
+            if (isHost && !data._relayed && data.type !== 'init' && data.type !== 'state-sync') {
+                data._relayed = true;
+                data.fromId = senderId;
+                relayMessage(conn.peer, data);
+            }
+        });
+
+        conn.on('close', () => {
+            delete connections[conn.peer];
+            delete peers[conn.peer];
+        });
+    }
+
+    function relayMessage(excludeId, data) {
+        Object.entries(connections).forEach(([peerId, conn]) => {
+            if (peerId !== excludeId) conn.send(data);
+        });
+    }
+
+    function broadcast(msg) {
+        msg.fromId = myId;
+        Object.values(connections).forEach(conn => conn.send(msg));
+    }
+
+    // ── MESSAGE HANDLING ──
+    function handleMessage(fromId, data) {
+        if (fromId === myId) return;
+
+        switch (data.type) {
+            case 'init':
+                peers[fromId] = { name: data.name, tag: data.tag };
+                if (isHost) {
+                    const conn = connections[fromId];
+                    if (conn) {
+                        conn.send({
+                            type: 'state-sync',
+                            fromId: myId,
+                            messages: messages,
+                            peers: peers,
+                            pinnedOrder: pinnedOrder,
+                            moderatorId: currentModeratorId
+                        });
+                    }
+                }
+                break;
+
+            case 'state-sync':
+                Object.assign(messages, data.messages || {});
+                Object.assign(peers, data.peers || {});
+                pinnedOrder = data.pinnedOrder || [];
+                if (data.moderatorId === myId) {
+                    isModerator = true;
+                    showRoleBadge('mod');
+                }
+                currentModeratorId = data.moderatorId;
+                renderMessages();
+                renderTopQuestions();
+                break;
+
+            case 'chat':
+                messages[data.id] = {
+                    id: data.id, senderId: fromId,
+                    senderName: data.senderName, senderTag: data.senderTag,
+                    text: data.text, votes: {}, pinned: false, done: false,
+                    timestamp: data.timestamp
+                };
+                renderMessages();
+                if (projectorOpen) renderProjectorChat();
+                break;
+
+            case 'vote':
+                if (messages[data.msgId]) {
+                    messages[data.msgId].votes[data.voterId] = true;
+                    renderMessages();
+                    if (projectorOpen) renderTopQuestions();
+                }
+                break;
+
+            case 'pin':
+                if (messages[data.msgId]) {
+                    messages[data.msgId].pinned = true;
+                    if (!pinnedOrder.includes(data.msgId)) pinnedOrder.push(data.msgId);
+                    renderMessages();
+                    renderTopQuestions();
+                }
+                break;
+
+            case 'mark-done':
+                if (messages[data.msgId]) {
+                    messages[data.msgId].done = true;
+                    renderMessages();
+                    renderTopQuestions();
+                }
+                break;
+
+            case 'assign-moderator':
+                if (data.targetPeerId === myId) {
+                    isModerator = true;
+                    showRoleBadge('mod');
+                }
+                currentModeratorId = data.targetPeerId;
+                break;
+
+            case 'rank-update':
+                pinnedOrder = data.orderedIds || [];
+                renderTopQuestions();
+                break;
+
+            case 'delete-msg':
+                delete messages[data.msgId];
+                pinnedOrder = pinnedOrder.filter(id => id !== data.msgId);
+                renderMessages();
+                renderTopQuestions();
+                if (projectorOpen) renderProjectorChat();
+                break;
+
+            case 'ban':
+                if (data.targetPeerId === myId) {
+                    if (peer) peer.destroy();
+                    document.body.innerHTML = `<div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:#0b0b0b;color:white;font-family:'Noto Sans Thai',sans-serif;">
+                        <div style="font-size:4rem">🚫</div>
+                        <div style="font-size:1.4rem;font-weight:700">คุณถูกแบนออกจากห้อง</div>
+                        <a href="index.html" style="color:#0070f3;font-size:0.9rem;">กลับหน้าหลัก</a>
+                    </div>`;
+                }
+                break;
+
+            case 'name-tag-update':
+                if (peers[fromId]) {
+                    peers[fromId].name = data.name;
+                    peers[fromId].tag  = data.tag;
+                }
+                renderMessages();
+                break;
+        }
+    }
+
+    // ── CHAT ──
+    function sendChat() {
+        const textarea = document.getElementById('chat-textarea');
+        const text = textarea.value.trim();
+        if (!text || !myId) return;
+
+        const msgId = `${Date.now()}-${(myId || '').slice(-4)}`;
+        const msg = {
+            id: msgId, senderId: myId,
+            senderName: myName, senderTag: myTag,
+            text: text, votes: {}, pinned: false, done: false,
+            timestamp: Date.now()
+        };
+        messages[msgId] = msg;
+
+        broadcast({ type: 'chat', id: msgId, senderName: myName, senderTag: myTag, text, timestamp: msg.timestamp });
+
+        textarea.value = '';
+        textarea.style.height = '';
+        renderMessages();
+        if (projectorOpen) renderProjectorChat();
+    }
+
+    function handleTextareaKey(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChat();
+        }
+    }
+
+    function autoResizeTextarea(el) {
+        el.style.height = '';
+        el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    // ── VOTING ──
+    function castVote(msgId) {
+        const msg = messages[msgId];
+        if (!msg || msg.votes[myId]) return;
+        msg.votes[myId] = true;
+        broadcast({ type: 'vote', msgId, voterId: myId });
+        renderMessages();
+        if (projectorOpen) renderTopQuestions();
+    }
+
+    // ── MODERATOR ──
+    function pinMessage(msgId) {
+        if (!isModerator && !isHost) return;
+        const msg = messages[msgId];
+        if (!msg || msg.pinned) return;
+        msg.pinned = true;
+        if (!pinnedOrder.includes(msgId)) pinnedOrder.push(msgId);
+        broadcast({ type: 'pin', msgId });
+        renderMessages();
+        renderTopQuestions();
+    }
+
+    // ── HOST ──
+    function assignModerator(targetPeerId) {
+        if (!isHost || targetPeerId === myId) return;
+        currentModeratorId = targetPeerId;
+        broadcast({ type: 'assign-moderator', targetPeerId });
+    }
+
+    function markDone(msgId) {
+        if (!isHost) return;
+        const msg = messages[msgId];
+        if (!msg) return;
+        msg.done = true;
+        broadcast({ type: 'mark-done', msgId });
+        renderMessages();
+        renderTopQuestions();
+    }
+
+    function deleteMessage(msgId) {
+        if (!isHost && !isModerator) return;
+        delete messages[msgId];
+        pinnedOrder = pinnedOrder.filter(id => id !== msgId);
+        broadcast({ type: 'delete-msg', msgId });
+        renderMessages();
+        renderTopQuestions();
+        if (projectorOpen) renderProjectorChat();
+    }
+
+    // ── NAME MENU ──
+    function openNameMenu(peerId, event) {
+        event.stopPropagation();
+        targetMenuPeerId = peerId;
+        const menu = document.getElementById('name-menu');
+        document.getElementById('nm-assign').style.display = isHost ? '' : 'none';
+        menu.style.display = 'flex';
+        menu.style.flexDirection = 'column';
+        const x = Math.min(event.clientX, window.innerWidth - 210);
+        const y = Math.min(event.clientY + 6, window.innerHeight - 80);
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+    }
+
+    function hideNameMenu() {
+        document.getElementById('name-menu').style.display = 'none';
+        targetMenuPeerId = null;
+    }
+
+    function doAssignModerator() {
+        if (!isHost || !targetMenuPeerId) return;
+        currentModeratorId = targetMenuPeerId;
+        broadcast({ type: 'assign-moderator', targetPeerId: targetMenuPeerId });
+        hideNameMenu();
+    }
+
+    function doBanUser() {
+        if (!targetMenuPeerId) return;
+        const bannedId = targetMenuPeerId;
+        broadcast({ type: 'ban', targetPeerId: bannedId });
+        if (isHost && connections[bannedId]) {
+            connections[bannedId].close();
+            delete connections[bannedId];
+            delete peers[bannedId];
+        }
+        hideNameMenu();
+    }
+
+    // ── RENDER: CHAT ──
+    function renderMessages() {
+        const list = document.getElementById('chat-list');
+        const sorted = Object.values(messages).sort((a, b) => a.timestamp - b.timestamp);
+
+        if (sorted.length === 0) {
+            list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">ยังไม่มีข้อความ พูดอะไรสักอย่างสิ!</div></div>';
+            return;
+        }
+
+        list.innerHTML = '';
+        sorted.forEach(msg => list.appendChild(createMessageEl(msg)));
+        list.scrollTop = list.scrollHeight;
+    }
+
+    function formatTime(ts) {
+        const d = new Date(ts);
+        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    }
+
+    function createMessageEl(msg) {
+        const tagInfo = TAG_META[msg.senderTag] || { icon: '👤', label: '' };
+        const voteCount = Object.keys(msg.votes).length;
+        const hasVoted = !!msg.votes[myId];
+        const canPin = (isModerator || isHost) && !msg.pinned;
+        const canDone = isHost && msg.pinned && !msg.done;
+        const isMe = msg.senderId === myId;
+        const isClickableName = (isHost || isModerator) && !isMe;
+        const canDelete = (isHost || isModerator) && !isMe;
+
+        const el = document.createElement('div');
+        el.className = 'msg' + (msg.pinned ? ' pinned' : '') + (msg.done ? ' done' : '');
+        el.dataset.msgId = msg.id;
+
+        const displayName = escapeHtml(msg.senderName) + (isMe ? ' (คุณ)' : '');
+
+        el.innerHTML = `
+            <span class="msg-time">${formatTime(msg.timestamp)}</span>
+            <span class="msg-sender-inline">
+                <span class="${isClickableName ? 'clickable-name' : ''}"
+                      ${isClickableName ? `onclick="openNameMenu('${msg.senderId}', event)" title="ตัวเลือก"` : ''}
+                >${displayName}</span><span class="msg-tag-inline" style="margin-left:3px;">${tagInfo.icon}</span>
+            </span>
+            <span class="msg-colon">:</span>
+            <span class="msg-text-inline" title="${escapeHtml(msg.text)}">${linkifyHtml(escapeHtml(msg.text))}</span>
+            <span class="msg-actions">
+                <button class="vote-btn${hasVoted ? ' voted' : ''}"
+                        onclick="castVote('${msg.id}')"
+                        ${hasVoted ? 'disabled' : ''}
+                        title="${hasVoted ? 'โหวตแล้ว' : 'โหวต'}">
+                    👍 ${voteCount}
+                </button>
+                ${canPin ? `<button class="action-mini-btn" onclick="pinMessage('${msg.id}')" title="ปักหมุด">📌</button>` : ''}
+                ${canDone ? `<button class="action-mini-btn done-btn" onclick="markDone('${msg.id}')" title="เสร็จแล้ว">✅</button>` : ''}
+                ${canDelete ? `<button class="action-mini-btn" onclick="deleteMessage('${msg.id}')" title="ลบข้อความ">🗑️</button>` : ''}
+            </span>
+        `;
+        return el;
+    }
+
+    // ── RENDER: TOP QUESTIONS ──
+    function renderTopQuestions() {
+        const container = document.getElementById('proj-top-questions');
+        const pinned = pinnedOrder
+            .map(id => messages[id])
+            .filter(Boolean)
+            .filter(m => !m.done);
+
+        if (pinned.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📌</div><div class="empty-state-text">คำถามที่ปักหมุดจะปรากฏที่นี่</div></div>';
+            return;
+        }
+
+        const sorted = pinned.sort((a, b) => Object.keys(b.votes).length - Object.keys(a.votes).length);
+
+        container.innerHTML = '';
+        sorted.forEach((msg, i) => {
+            const tagInfo = TAG_META[msg.senderTag] || { icon: '👤', label: '' };
+            const voteCount = Object.keys(msg.votes).length;
+
+            const item = document.createElement('div');
+            item.className = 'top-q-item';
+            item.dataset.msgId = msg.id;
+            item.innerHTML = `
+                <div class="tq-rank">#${i + 1}</div>
+                <div class="tq-body">
+                    <div class="tq-sender">${tagInfo.icon} ${msg.senderName}</div>
+                    <div class="tq-text">${linkifyHtml(escapeHtml(msg.text))}</div>
+                    <div class="tq-vote">👍 ${voteCount} โหวต</div>
+                </div>
+                ${isHost ? `<button class="tq-done-btn" onclick="markDone('${msg.id}')" title="เสร็จแล้ว">✅ เสร็จแล้ว</button>` : ''}
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    // ── RENDER: PROJECTOR CHAT ──
+    function renderProjectorChat() {
+        const stream = document.getElementById('proj-chat-stream');
+        const sorted = Object.values(messages).sort((a, b) => a.timestamp - b.timestamp);
+
+        if (sorted.length === 0) {
+            stream.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">ข้อความสดจะปรากฏที่นี่</div></div>';
+            return;
+        }
+
+        const recent = sorted.slice(-50);
+        stream.innerHTML = '';
+        recent.forEach(msg => {
+            const tagInfo = TAG_META[msg.senderTag] || { icon: '👤', label: '' };
+            const isClickable = isHost && msg.senderId !== myId;
+            const item = document.createElement('div');
+            item.className = 'proj-stream-msg';
+            item.innerHTML = `
+                <span class="proj-stream-time">${formatTime(msg.timestamp)}</span>
+                <span class="proj-stream-sender">
+                    <span class="${isClickable ? 'clickable-name' : ''}"
+                          ${isClickable ? `onclick="openNameMenu('${msg.senderId}', event)" title="ตัวเลือก"` : ''}
+                    >${escapeHtml(msg.senderName)}</span><span style="margin-left:3px">${tagInfo.icon}</span>
+                </span>
+                <span style="color:var(--muted);flex-shrink:0;margin:0 2px;font-size:0.9rem">:</span>
+                <span class="proj-stream-text">${linkifyHtml(escapeHtml(msg.text))}</span>
+            `;
+            stream.appendChild(item);
+        });
+        stream.scrollTop = stream.scrollHeight;
+    }
+
+    // ── PROJECTOR MODE ──
+    function toggleProjectorMode() {
+        if (!isHost) return;
+        projectorOpen = true;
+        document.getElementById('app-screen').style.display = 'none';
+        document.getElementById('projector-screen').style.display = 'flex';
+
+        renderTopQuestions();
+        renderProjectorChat();
+        generateProjQR();
+    }
+
+    function exitProjectorMode() {
+        projectorOpen = false;
+        document.getElementById('projector-screen').style.display = 'none';
+        document.getElementById('app-screen').style.display = 'flex';
+    }
+
+    function generateProjQR() {
+        const box = document.getElementById('proj-qr-code');
+        box.innerHTML = '';
+        new QRCode(box, {
+            text: window.location.href,
+            width: 400, height: 400,
+            colorDark: '#000000', colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    }
+
+    // ── NAME / TAG EDIT ──
+    function updateMyNameTag() {
+        const name = document.getElementById('header-name').value.trim();
+        if (!name) return;
+        myName = name;
+        localStorage.setItem('meetupChatName', myName);
+        if (peers[myId]) peers[myId].name = myName;
+        broadcast({ type: 'name-tag-update', name: myName, tag: myTag });
+    }
+
+    function openTagPicker() {
+        const modal = document.getElementById('tag-modal');
+        document.querySelectorAll('#modal-tag-grid .tag-pill').forEach(p => {
+            p.classList.toggle('active', p.dataset.tag === myTag);
+        });
+        modal.style.display = 'flex';
+    }
+
+    function hideTagPicker(e) {
+        document.getElementById('tag-modal').style.display = 'none';
+    }
+
+    function selectModalTag(el) {
+        document.querySelectorAll('#modal-tag-grid .tag-pill').forEach(p => p.classList.remove('active'));
+        el.classList.add('active');
+        myTag = el.dataset.tag;
+        localStorage.setItem('meetupChatTag', myTag);
+        if (peers[myId]) peers[myId].tag = myTag;
+        document.getElementById('header-tag-btn').textContent = TAG_META[myTag]?.icon || '❓';
+        broadcast({ type: 'name-tag-update', name: myName, tag: myTag });
+        hideTagPicker();
+    }
+
+    function showRoleBadge(role) {
+        const rb = document.getElementById('role-badge');
+        if (role === 'host') { rb.textContent = 'HOST'; rb.className = 'role-badge host'; }
+        else if (role === 'mod') { rb.textContent = 'MOD'; rb.className = 'role-badge mod'; }
+        rb.style.display = '';
+    }
+
+    // ── UTILS ──
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function linkifyHtml(escaped) {
+        return escaped.replace(
+            /(https?:\/\/[^\s&<>"]+)/g,
+            '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline;word-break:break-all;">$1</a>'
+        );
+    }
+
+    function copyRoomLink() {
+        navigator.clipboard.writeText(window.location.href).then(() => {
+            const badge = document.getElementById('room-badge');
+            const old = badge.textContent;
+            badge.textContent = 'COPIED!';
+            setTimeout(() => badge.textContent = old, 2000);
+        });
+    }
+
+    // ── QR MODAL ──
+    function showQR() {
+        const modal = document.getElementById('qr-modal');
+        const box = document.getElementById('qr-code');
+        box.innerHTML = '';
+        document.getElementById('qr-url').textContent = window.location.href;
+        new QRCode(box, {
+            text: window.location.href, width: 200, height: 200,
+            colorDark: '#000000', colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+        modal.classList.add('active');
+    }
+
+    function hideQR() {
+        document.getElementById('qr-modal').classList.remove('active');
+    }
+
+    // ── DEV MENU ──
+    function toggleDevMenu() {
+        document.getElementById('dev-menu').classList.toggle('active');
+    }
+
+    function copyAIPrompt() {
+        const prompt = `# Specification: Meetup Chat (P2P)
+
+## Meta
+- **Version**: 1.0.0
+- **Created**: 2026-06-27
+- **Model**: Claude Sonnet 4.6
+- **Target**: \`src/meetup-chat.html\`
+
+## Description
+A WebRTC-based group chat tool for in-person meetup events. The host displays a projector split-screen view showing top-voted questions and a live chat stream, while attendees join via QR code.
+
+## Features
+- **P2P WebRTC** via PeerJS with host-relay model
+- **Roles**: Host (projector view, assign moderator), Moderator (pin/rank questions), User (chat, vote)
+- **User Tags**: QA 🔍, Dev 💻, Single ❤️, Find Job 🎯, Find People 🤝
+- **Voting**: 1 upvote per message per user
+- **Moderator**: Pin messages to top questions panel
+- **Host Projector View**: Split screen – top voted questions + live chat stream; QR in corner
+- **Dark Mode**: Full dark theme throughout
+- **Thai + Google Fonts**: Noto Sans Thai for multilingual support`;
+
+        navigator.clipboard.writeText(prompt).then(() => {
+            alert('Specification copied!');
+            toggleDevMenu();
+        });
+    }
+
+    // ── BOOT ──
+    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('name-menu');
+        if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+            hideNameMenu();
+        }
+    });
+</script>
+</body>
+</html>

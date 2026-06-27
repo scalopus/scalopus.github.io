@@ -1,0 +1,1167 @@
+<!--
+    Application: Spec Builder
+    Version: 1.0.0
+    Created: 2026-06-10
+    Model: Claude Sonnet 4.6
+    Description: Interactively build Claude agent/skill/tool specifications via a Tinder-style
+                 swipe card Q&A flow. Generates a downloadable Markdown spec document.
+    Specification: specs/spec-builder-spec.md
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spec Builder | Scalopus</title>
+    <style>
+        :root {
+            --bg-color: #0b0b0b;
+            --card-bg: #1a1a1a;
+            --card-bg-2: #222;
+            --card-border: #333;
+            --accent: #0070f3;
+            --text: #ffffff;
+            --muted: #888;
+            --yes-color: #22c55e;
+            --no-color: #ef4444;
+            --yes-glow: rgba(34,197,94,0.3);
+            --no-glow: rgba(239,68,68,0.3);
+            --dev-bg: #1a1a1a;
+            --surface: #131313;
+        }
+
+        *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%; height: 100%; background: var(--bg-color); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        section { display: none; }
+        section.active { display: flex; }
+
+        /* ── INTRO ─────────────────────────────────────────────── */
+        #screen-intro {
+            min-height: 100vh; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: 40px 20px;
+        }
+
+        .intro-logo {
+            font-size: 3rem; margin-bottom: 12px;
+        }
+
+        #screen-intro h1 {
+            font-size: 2rem; font-weight: 700; margin-bottom: 8px;
+        }
+
+        #screen-intro .subtitle {
+            color: var(--muted); font-size: 1rem; margin-bottom: 32px; text-align: center;
+            max-width: 400px; line-height: 1.5;
+        }
+
+        #initial-prompt {
+            width: 100%; max-width: 480px; min-height: 120px;
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            color: var(--text); border-radius: 12px; padding: 14px 16px;
+            font-size: 1rem; font-family: inherit; resize: vertical; outline: none;
+            transition: border-color 0.2s;
+            line-height: 1.5;
+        }
+        #initial-prompt:focus { border-color: var(--accent); }
+        #initial-prompt::placeholder { color: var(--muted); }
+
+        #start-btn {
+            margin-top: 16px; padding: 14px 36px;
+            background: var(--accent); color: white; border: none;
+            border-radius: 10px; font-size: 1.05rem; font-weight: 600;
+            cursor: pointer; transition: background 0.2s, transform 0.1s;
+        }
+        #start-btn:hover { background: #0060df; }
+        #start-btn:active { transform: scale(0.97); }
+
+        /* ── LOADING ───────────────────────────────────────────── */
+        #screen-loading {
+            min-height: 100vh; flex-direction: column;
+            justify-content: center; align-items: center; gap: 24px;
+        }
+
+        .skeleton-stack {
+            position: relative; width: 320px; height: 420px;
+        }
+        .skeleton-card {
+            position: absolute; width: 100%; border-radius: 16px;
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            animation: shimmer 1.4s infinite;
+        }
+        .skeleton-card:nth-child(1) { height: 100%; top: 0; z-index: 2; }
+        .skeleton-card:nth-child(2) { height: 100%; top: 12px; z-index: 1; transform: scale(0.96); }
+        .skeleton-card:nth-child(3) { height: 100%; top: 22px; z-index: 0; transform: scale(0.92); }
+
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 0.9; }
+        }
+
+        .loading-label { color: var(--muted); font-size: 0.9rem; }
+
+        /* ── SWIPING ───────────────────────────────────────────── */
+        #screen-swiping {
+            min-height: 100vh; flex-direction: column;
+            align-items: center; padding: 24px 20px 100px;
+        }
+
+        #swipe-header {
+            width: 100%; max-width: 380px;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px;
+        }
+
+        #dimension-label {
+            font-size: 0.9rem; font-weight: 600; color: var(--accent);
+        }
+
+        #round-counter {
+            font-size: 0.8rem; color: var(--muted);
+        }
+
+        .progress-bar-track {
+            width: 100%; max-width: 380px; height: 4px;
+            background: var(--card-border); border-radius: 2px; margin-bottom: 20px;
+        }
+        .progress-bar-fill {
+            height: 100%; background: var(--accent); border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .card-stack {
+            position: relative; width: 340px;
+            height: min(480px, 60vh); flex-shrink: 0;
+        }
+
+        .card-ghost {
+            position: absolute; width: 100%; height: 100%;
+            border-radius: 16px; background: var(--card-bg);
+            border: 1px solid var(--card-border);
+        }
+        .card-ghost:nth-child(1) { transform: translateY(12px) scale(0.96); z-index: 1; }
+        .card-ghost:nth-child(2) { transform: translateY(22px) scale(0.92); z-index: 0; }
+
+        #active-card {
+            position: absolute; width: 100%; height: 100%;
+            border-radius: 16px; background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            z-index: 2; cursor: grab; touch-action: none; user-select: none;
+            will-change: transform; overflow: hidden;
+        }
+        #active-card:active { cursor: grabbing; }
+
+        .card-verdict {
+            position: absolute; top: 24px; padding: 6px 14px;
+            border-radius: 8px; font-size: 1.2rem; font-weight: 800;
+            letter-spacing: 2px; pointer-events: none; opacity: 0;
+            border: 3px solid;
+        }
+        .card-verdict.yes { left: 18px; color: var(--yes-color); border-color: var(--yes-color); transform: rotate(-12deg); }
+        .card-verdict.no  { right: 18px; color: var(--no-color); border-color: var(--no-color); transform: rotate(12deg); }
+
+        #card-content {
+            height: 100%; padding: 20px 20px 16px;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        .card-tag {
+            font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--muted); margin-bottom: 12px;
+        }
+
+        .card-question {
+            font-size: clamp(0.95rem, 2.5vw, 1.2rem); line-height: 1.55;
+            font-weight: 500; flex: 1;
+        }
+
+        .card-example-box {
+            margin: 12px 0; background: var(--surface);
+            border: 1px solid var(--card-border); border-radius: 8px;
+            overflow: hidden; font-size: 0.82rem;
+        }
+        .card-example-label {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--muted); padding: 6px 10px;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .card-example-text {
+            padding: 8px 10px; font-family: "SFMono-Regular", Consolas, monospace;
+            line-height: 1.5; color: #ccc; white-space: pre-wrap; word-break: break-word;
+        }
+        .card-example-text.output { color: #a8e6a3; }
+
+        .card-diagram {
+            margin: 12px 0; background: var(--surface);
+            border: 1px solid var(--card-border); border-radius: 8px;
+            padding: 10px 12px;
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 0.78rem; color: #aaa; white-space: pre; line-height: 1.6;
+            overflow-x: auto;
+        }
+
+        .card-hint {
+            font-size: 0.78rem; color: var(--muted); font-style: italic; margin-top: 8px;
+        }
+
+        .swipe-hint {
+            margin-top: 18px; font-size: 0.78rem; color: var(--muted); letter-spacing: 0.5px;
+        }
+
+        .action-btns {
+            display: flex; gap: 40px; margin-top: 16px; align-items: center;
+        }
+
+        .action-btns button {
+            width: 58px; height: 58px; border-radius: 50%; border: 2px solid;
+            font-size: 1.5rem; cursor: pointer; background: none;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .action-btns button:active { transform: scale(0.9); }
+
+        .btn-no  { color: var(--no-color);  border-color: var(--no-color);  }
+        .btn-yes { color: var(--yes-color); border-color: var(--yes-color); }
+        .btn-no:hover  { box-shadow: 0 0 12px var(--no-glow); }
+        .btn-yes:hover { box-shadow: 0 0 12px var(--yes-glow); }
+
+        .yes-tally {
+            display: flex; gap: 8px; margin-top: 14px;
+        }
+        .tally-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--card-border); transition: background 0.2s, transform 0.2s;
+        }
+        .tally-dot.filled { background: var(--yes-color); transform: scale(1.35); }
+
+        @keyframes swipe-right-out {
+            to { transform: translateX(130%) rotate(30deg); opacity: 0; }
+        }
+        @keyframes swipe-left-out {
+            to { transform: translateX(-130%) rotate(-30deg); opacity: 0; }
+        }
+        #active-card.exit-right { animation: swipe-right-out 0.35s ease-in forwards; pointer-events: none; }
+        #active-card.exit-left  { animation: swipe-left-out  0.35s ease-in forwards; pointer-events: none; }
+
+        @keyframes confirmed-flash {
+            0%   { box-shadow: 0 0 0 0 var(--yes-glow); }
+            50%  { box-shadow: 0 0 30px 10px var(--yes-glow); }
+            100% { box-shadow: 0 0 0 0 var(--yes-glow); }
+        }
+        .confirmed-flash { animation: confirmed-flash 0.6s ease; }
+
+        /* ── SUMMARY ───────────────────────────────────────────── */
+        #screen-summary {
+            min-height: 100vh; flex-direction: column;
+            align-items: center; padding: 40px 20px 100px;
+        }
+
+        #screen-summary h2 { font-size: 1.4rem; margin-bottom: 20px; }
+
+        .summary-card {
+            width: 100%; max-width: 420px;
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 16px; padding: 24px;
+        }
+
+        .summary-title {
+            font-size: 1rem; font-weight: 700; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .summary-section-label {
+            font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px;
+            color: var(--muted); margin-bottom: 8px; margin-top: 14px;
+        }
+
+        .summary-item {
+            font-size: 0.88rem; padding: 6px 0; border-bottom: 1px solid #2a2a2a;
+            line-height: 1.45; display: flex; align-items: flex-start; gap: 8px;
+        }
+        .summary-item:last-child { border-bottom: none; }
+        .summary-item .dot { flex-shrink: 0; margin-top: 3px; }
+
+        .summary-actions {
+            margin-top: 24px; display: flex; flex-direction: column; gap: 10px;
+            width: 100%; max-width: 420px;
+        }
+
+        .btn-primary {
+            padding: 14px; background: var(--accent); color: white;
+            border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #0060df; }
+
+        .btn-ghost {
+            padding: 12px; background: none; color: var(--muted);
+            border: 1px solid var(--card-border); border-radius: 10px;
+            font-size: 0.9rem; cursor: pointer; transition: color 0.2s, border-color 0.2s;
+        }
+        .btn-ghost:hover { color: var(--text); border-color: #666; }
+
+        /* ── OUTPUT ────────────────────────────────────────────── */
+        #screen-output {
+            min-height: 100vh; flex-direction: column;
+            align-items: center; padding: 30px 20px 100px;
+        }
+
+        .output-header {
+            width: 100%; max-width: 700px;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 14px;
+        }
+        .output-header h2 { font-size: 1.3rem; }
+        .output-actions { display: flex; gap: 10px; }
+        .output-actions button {
+            padding: 8px 16px; border-radius: 8px; font-size: 0.85rem;
+            cursor: pointer; border: 1px solid var(--card-border);
+            background: var(--card-bg); color: var(--text);
+            transition: background 0.2s;
+        }
+        .output-actions button:hover { background: #2a2a2a; }
+        .output-actions button.primary-btn {
+            background: var(--accent); border-color: var(--accent); color: white;
+        }
+        .output-actions button.primary-btn:hover { background: #0060df; }
+
+        #spec-output {
+            width: 100%; max-width: 700px;
+            background: var(--surface); border: 1px solid var(--card-border);
+            border-radius: 12px; padding: 20px;
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 0.85rem; line-height: 1.65; color: #ccc;
+            white-space: pre-wrap; word-break: break-word;
+            max-height: 60vh; overflow-y: auto;
+        }
+
+        .output-footer {
+            margin-top: 16px; display: flex; gap: 10px;
+        }
+
+        /* ── STANDARD TOOLKIT ICONS ────────────────────────────── */
+        .bottom-icon {
+            position: fixed; bottom: 20px; font-size: 1.5rem; cursor: pointer;
+            opacity: 0.5; transition: opacity 0.3s, transform 0.2s; z-index: 100;
+            background: none; border: none; color: white; text-decoration: none;
+        }
+        .bottom-icon:hover { opacity: 1; transform: scale(1.1); }
+        #home-link { left: 20px; }
+        #dev-btn { right: 20px; }
+
+        #dev-menu {
+            position: fixed; bottom: 60px; right: 20px; background: var(--dev-bg);
+            border: 1px solid #333; border-radius: 8px; padding: 15px;
+            display: none; flex-direction: column; gap: 10px; width: 250px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 101;
+        }
+        #dev-menu.active { display: flex; }
+        .dev-label { font-weight: 600; color: #666; font-size: 0.7rem; text-transform: uppercase; }
+        .dev-item {
+            font-size: 0.85rem; color: #ccc; text-decoration: none; padding: 8px;
+            border-radius: 4px; display: flex; align-items: center; gap: 10px;
+            cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+        }
+        .dev-item:hover { background: #2a2a2a; color: white; }
+
+        @media (max-width: 400px) {
+            .card-stack { width: 92vw; }
+            #screen-swiping { padding: 16px 8px 100px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- INTRO -->
+<section id="screen-intro">
+    <div class="intro-logo">🧠</div>
+    <h1>Spec Builder</h1>
+    <p class="subtitle">Describe what you want to build. We'll ask you simple Yes/No questions to define it precisely.</p>
+    <textarea id="initial-prompt" placeholder="e.g. I want a skill that summarizes web pages into bullet points, for use in Claude Code..."></textarea>
+    <button id="start-btn" onclick="startSession()">Build Spec →</button>
+</section>
+
+<!-- LOADING -->
+<section id="screen-loading">
+    <div class="skeleton-stack">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+    </div>
+    <p class="loading-label">Preparing questions…</p>
+</section>
+
+<!-- SWIPING -->
+<section id="screen-swiping">
+    <div id="swipe-header">
+        <div id="dimension-label">🎯 Core Purpose</div>
+        <div id="round-counter">Card <span id="card-num">1</span>/10</div>
+    </div>
+    <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+    <div class="card-stack" id="card-stack">
+        <div class="card-ghost"></div>
+        <div class="card-ghost"></div>
+        <div id="active-card">
+            <div class="card-verdict yes">YES ✓</div>
+            <div class="card-verdict no">✗ NO</div>
+            <div id="card-content"></div>
+        </div>
+    </div>
+    <p class="swipe-hint">← NO &nbsp;·&nbsp; swipe or tap buttons &nbsp;·&nbsp; YES →</p>
+    <div class="action-btns">
+        <button class="btn-no"  onclick="recordDecision('no')"  title="No (←)">✗</button>
+        <button class="btn-yes" onclick="recordDecision('yes')" title="Yes (→)">✓</button>
+    </div>
+    <div class="yes-tally" id="yes-tally"></div>
+</section>
+
+<!-- SUMMARY -->
+<section id="screen-summary">
+    <h2>Round Summary</h2>
+    <div class="summary-card" id="summary-content"></div>
+    <div class="summary-actions">
+        <button class="btn-primary" onclick="nextDimension()">Continue →</button>
+        <button class="btn-ghost" onclick="retryDimension()">Reconsider this dimension</button>
+    </div>
+</section>
+
+<!-- OUTPUT -->
+<section id="screen-output">
+    <div class="output-header">
+        <h2>Your Spec</h2>
+        <div class="output-actions">
+            <button onclick="copySpec()">Copy</button>
+            <button class="primary-btn" onclick="downloadSpec()">Download .md</button>
+        </div>
+    </div>
+    <pre id="spec-output"></pre>
+    <div class="output-footer">
+        <button class="btn-ghost" onclick="startOver()" style="padding:10px 20px; font-size:0.85rem;">Start Over</button>
+    </div>
+</section>
+
+<!-- PERSISTENT -->
+<a href="index.html" id="home-link" class="bottom-icon" title="Home">🏠</a>
+<button id="dev-btn" class="bottom-icon" onclick="toggleDevMenu()" title="Developer Menu">🛠️</button>
+
+<div id="dev-menu">
+    <div class="dev-label">Developer Options</div>
+    <a href="https://github.com/scalopus/scalopus.github.io/blob/main/src/spec-builder.html" target="_blank" class="dev-item">
+        <span>📂</span> View Source Code
+    </a>
+    <button class="dev-item" onclick="copyAIPrompt()">
+        <span>🤖</span> AI Prompt
+    </button>
+    <div class="dev-label">Tool Information</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Version: 1.0.0</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Created: 2026-06-10</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px;">Model: Claude Sonnet 4.6</div>
+</div>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+
+const DIMENSIONS = [
+    { id: 'purpose',     label: 'Core Purpose',       icon: '🎯' },
+    { id: 'input',       label: 'Input & Triggers',    icon: '📥' },
+    { id: 'output',      label: 'Output Format',       icon: '📤' },
+    { id: 'behavior',    label: 'Behavior & Rules',    icon: '⚙️' },
+    { id: 'constraints', label: 'Constraints & Limits',icon: '🔒' },
+    { id: 'edgecases',   label: 'Edge Cases',          icon: '⚠️' },
+    { id: 'examples',    label: 'Examples & Style',    icon: '💡' },
+];
+
+const QUESTION_BANK = {
+    purpose: [
+        { id:'p0', type:'statement', text:'This tool should work autonomously without requiring user input during execution.', keywords:['autonomous','agent','background','batch','auto'] },
+        { id:'p1', type:'statement', text:'The primary user of this tool is a developer or technical user, not an end-user.', keywords:['developer','technical','engineer','code'] },
+        { id:'p2', type:'statement', text:'This skill should be reusable across multiple different Claude projects.', keywords:['reusable','general','skill','tool','shared'] },
+        { id:'p3', type:'statement', text:'The tool\'s main job is to transform or process existing content (not create from scratch).', keywords:['transform','process','convert','summarize','extract','analyze'] },
+        { id:'p4', type:'statement', text:'This is a one-shot tool: takes input, produces output, done — no back-and-forth conversation.', keywords:['one-shot','batch','single','quick'] },
+        { id:'p5', type:'statement', text:'The tool should improve productivity within an existing workflow, not replace a workflow.', keywords:['workflow','productivity','assist','help','enhance'] },
+        { id:'p6', type:'statement', text:'This tool is primarily for data extraction or analysis, not content generation.', keywords:['extract','analyze','data','parse','find','search'] },
+        { id:'p7', type:'statement', text:'The tool is meant to assist with creative tasks (writing, brainstorming, ideation).', keywords:['write','creative','generate','draft','brainstorm','idea'] },
+        { id:'p8', type:'visual', question:'Does this describe how you imagine the tool being used?',
+          diagram:'User → sends request\n  ↓\n[Skill] processes it\n  ↓\nResult returned immediately\n(no back-and-forth)',
+          caption:'One-shot execution — input in, output out, no conversation loop.' },
+        { id:'p9', type:'visual', question:'Or is this a better description of your tool?',
+          diagram:'User → question 1\n  ↔ [Agent] ← clarifies\nUser → answer\n  ↔ [Agent] ← refines\nUser ← final result',
+          caption:'Multi-turn agent — iterates with the user to refine the result.' },
+        { id:'p10', type:'statement', text:'This tool primarily helps users understand or summarize information.', keywords:['summarize','understand','explain','tldr','brief','overview'] },
+        { id:'p11', type:'statement', text:'The tool automates a repetitive task that currently takes manual effort.', keywords:['automate','repetitive','manual','routine','batch'] },
+        { id:'p12', type:'statement', text:'This skill will be invoked as a slash command inside Claude Code.', keywords:['claude','code','slash','command','cli','terminal'] },
+    ],
+    input: [
+        { id:'i0', type:'statement', text:'The main input is a URL or web page to be fetched and processed.', keywords:['url','web','page','fetch','site','link'] },
+        { id:'i1', type:'statement', text:'The input is free-form natural language text provided by the user.', keywords:['text','natural','language','input','prompt','message'] },
+        { id:'i2', type:'statement', text:'The tool reads from local files on the user\'s filesystem.', keywords:['file','local','read','disk','filesystem','path'] },
+        { id:'i3', type:'statement', text:'The input includes structured data like JSON, CSV, or YAML.', keywords:['json','csv','yaml','structured','data','format'] },
+        { id:'i4', type:'statement', text:'The tool is triggered automatically when certain conditions are met, not manually invoked.', keywords:['trigger','automatic','event','hook','schedule','watch'] },
+        { id:'i5', type:'statement', text:'The user must always provide explicit input each time the tool runs.', keywords:['explicit','manual','user','provide','input'] },
+        { id:'i6', type:'statement', text:'The tool can infer context from the current file or editor state without the user specifying it.', keywords:['context','infer','current','editor','file','state'] },
+        { id:'i7', type:'statement', text:'The input can come from external APIs or third-party services.', keywords:['api','external','service','third-party','integrate'] },
+        { id:'i8', type:'example', question:'Does this represent a typical way your tool would be invoked?',
+          exampleInput:'/my-skill https://example.com/article',
+          exampleOutput:'Analyzing page... done.\n\n[Result follows]',
+          hint:'If URL-based invocation matches what you want, swipe YES.' },
+        { id:'i9', type:'example', question:'Or is this more like how your tool would be called?',
+          exampleInput:'/my-skill "Summarize the last 10 commits in this repo"',
+          exampleOutput:'Processing... [Result]',
+          hint:'If natural language prompts are the primary input, swipe YES.' },
+        { id:'i10', type:'statement', text:'The tool needs no input at all — it operates on the current context automatically.', keywords:['no-input','automatic','context','ambient'] },
+        { id:'i11', type:'statement', text:'The tool accepts a mix of text and structured parameters (e.g., --format json).', keywords:['parameter','flag','option','structured','mix'] },
+        { id:'i12', type:'visual', question:'Which input pattern best matches your vision?',
+          diagram:'Pattern A: user types a URL or filepath\nPattern B: user writes a natural language question\nPattern C: tool reads context silently (no input needed)',
+          caption:'Most tools fit one dominant input pattern.' },
+    ],
+    output: [
+        { id:'o0', type:'statement', text:'The output should always be structured data (JSON or YAML), not prose.', keywords:['json','yaml','structured','data','format','machine'] },
+        { id:'o1', type:'statement', text:'A short human-readable summary (under 200 words) is preferable to a detailed report.', keywords:['short','brief','summary','concise','tldr','quick'] },
+        { id:'o2', type:'statement', text:'The output should include citations, sources, or references.', keywords:['citation','source','reference','link','credit'] },
+        { id:'o3', type:'statement', text:'The output should be formatted as Markdown (headers, bullets, code blocks).', keywords:['markdown','format','header','bullet','list'] },
+        { id:'o4', type:'statement', text:'The output should be a single definitive answer, not a list of options.', keywords:['single','definitive','answer','conclusion','result'] },
+        { id:'o5', type:'statement', text:'The output must be copy-paste ready — no surrounding commentary or caveats.', keywords:['copy-paste','ready','clean','direct','no-commentary'] },
+        { id:'o6', type:'statement', text:'The output includes a visual diagram, table, or chart alongside text.', keywords:['diagram','table','chart','visual','figure'] },
+        { id:'o7', type:'statement', text:'The output length should adapt to the complexity of the input.', keywords:['adaptive','dynamic','variable','length','complexity'] },
+        { id:'o8', type:'example', question:'Is this a representative example of your expected output format?',
+          exampleInput:'[Any input]',
+          exampleOutput:'## Summary\n- Point 1\n- Point 2\n- Point 3\n\n**Key takeaway**: ...',
+          hint:'If bullet-point markdown summaries match your vision, swipe YES.' },
+        { id:'o9', type:'example', question:'Or is this output format closer to what you want?',
+          exampleInput:'[Any input]',
+          exampleOutput:'{"result": "...", "confidence": 0.9, "sources": ["..."]}',
+          hint:'If machine-readable JSON output is what you need, swipe YES.' },
+        { id:'o10', type:'statement', text:'The output should be written in the same language as the input.', keywords:['language','locale','international','multilingual'] },
+        { id:'o11', type:'statement', text:'The output should preserve the original tone and voice of the source material.', keywords:['tone','voice','preserve','style','original'] },
+        { id:'o12', type:'statement', text:'The output should always start with an executive summary or TL;DR.', keywords:['executive','summary','tldr','overview','first'] },
+    ],
+    behavior: [
+        { id:'b0', type:'statement', text:'The tool should ask clarifying questions before producing output if the request is ambiguous.', keywords:['clarify','question','ambiguous','ask','confirm'] },
+        { id:'b1', type:'statement', text:'The tool should proceed with reasonable assumptions rather than stopping to ask for clarification.', keywords:['assume','proceed','autonomy','silent','no-ask'] },
+        { id:'b2', type:'statement', text:'The tool should show its reasoning or chain-of-thought, not just the final answer.', keywords:['reasoning','chain-of-thought','explain','steps','thinking','transparent'] },
+        { id:'b3', type:'statement', text:'Intermediate progress updates should be shown while the tool runs.', keywords:['progress','update','status','streaming','verbose'] },
+        { id:'b4', type:'statement', text:'The tool should be conservative — when uncertain, output less rather than more.', keywords:['conservative','cautious','uncertain','less','careful'] },
+        { id:'b5', type:'statement', text:'The tool should produce multiple options or alternatives for the user to choose from.', keywords:['options','alternatives','multiple','choices','select'] },
+        { id:'b6', type:'statement', text:'The tool should remember context or preferences between invocations.', keywords:['memory','remember','persist','context','history','state'] },
+        { id:'b7', type:'statement', text:'Each invocation should be fully independent — no memory between runs.', keywords:['stateless','independent','isolated','fresh','no-memory'] },
+        { id:'b8', type:'statement', text:'The tool should validate its output before returning it (self-check).', keywords:['validate','check','verify','self','quality','review'] },
+        { id:'b9', type:'visual', question:'Which execution model describes your tool?',
+          diagram:'[Model A] Silent worker\nInput → process → output\n(no commentary)\n\n[Model B] Transparent worker\nInput → "Analyzing..." → "Found X..."\n→ "Done." → output',
+          caption:'Silent vs verbose execution style.' },
+        { id:'b10', type:'statement', text:'The tool should be opinionated — it makes decisions for the user rather than presenting options.', keywords:['opinionated','decide','choose','recommend','prescriptive'] },
+        { id:'b11', type:'statement', text:'The tool should support undo or a way to roll back its changes.', keywords:['undo','rollback','revert','safe','reversible'] },
+        { id:'b12', type:'statement', text:'The tool should log or record what it did for audit purposes.', keywords:['log','audit','record','trace','history'] },
+    ],
+    constraints: [
+        { id:'c0', type:'statement', text:'This tool must work without any external API calls (fully offline/local).', keywords:['offline','local','no-api','self-contained','private'] },
+        { id:'c1', type:'statement', text:'The tool should complete in under 30 seconds for typical inputs.', keywords:['fast','quick','30s','speed','performance','latency'] },
+        { id:'c2', type:'statement', text:'The tool should handle inputs in multiple human languages.', keywords:['multilingual','language','international','i18n','global'] },
+        { id:'c3', type:'statement', text:'The output must not contain any personally identifiable information (PII).', keywords:['pii','privacy','personal','sensitive','secure','anonymize'] },
+        { id:'c4', type:'statement', text:'The tool must work on large inputs (>10,000 tokens) without truncating.', keywords:['large','long','big','10k','truncate','full'] },
+        { id:'c5', type:'statement', text:'Cost efficiency is a priority — the tool should minimize token usage.', keywords:['cost','cheap','tokens','efficient','frugal','budget'] },
+        { id:'c6', type:'statement', text:'The tool needs to run in an environment with no internet access.', keywords:['airgapped','offline','no-internet','secure','isolated'] },
+        { id:'c7', type:'statement', text:'The tool should work within the context window of a single Claude request (no chaining).', keywords:['single','context','window','one-shot','no-chain'] },
+        { id:'c8', type:'statement', text:'The tool must only read data, never write or modify anything.', keywords:['read-only','safe','no-write','readonly','observe'] },
+        { id:'c9', type:'statement', text:'The tool requires specific permissions (filesystem, network, shell execution).', keywords:['permission','filesystem','network','shell','execute','access'] },
+        { id:'c10', type:'visual', question:'Which resource profile fits your tool?',
+          diagram:'[Light]  read-only, no APIs, fast (<5s)\n[Medium] may call APIs, moderate compute\n[Heavy]  multi-step, long context, slow OK',
+          caption:'Understanding resource needs shapes how the tool is built.' },
+        { id:'c11', type:'statement', text:'The tool should be idempotent — running it twice produces the same result.', keywords:['idempotent','deterministic','reproducible','consistent'] },
+        { id:'c12', type:'statement', text:'Rate limits or quotas must be respected (e.g., API call limits per minute).', keywords:['rate-limit','quota','throttle','limit','api'] },
+    ],
+    edgecases: [
+        { id:'e0', type:'statement', text:'If the input is ambiguous, the tool should make a reasonable assumption and proceed.', keywords:['ambiguous','assume','proceed','graceful','fallback'] },
+        { id:'e1', type:'statement', text:'Empty or malformed input should return a clear, helpful error message.', keywords:['empty','malformed','error','invalid','message','handle'] },
+        { id:'e2', type:'statement', text:'The tool should gracefully handle very long inputs without failing.', keywords:['long','large','truncate','chunked','graceful','overflow'] },
+        { id:'e3', type:'statement', text:'If the tool can\'t complete its task, it should say so clearly rather than returning a partial result.', keywords:['fail','partial','incomplete','honest','clear','error'] },
+        { id:'e4', type:'statement', text:'The tool should handle duplicate or repeated inputs without producing duplicate outputs.', keywords:['duplicate','repeat','idempotent','dedup'] },
+        { id:'e5', type:'statement', text:'If external services are unavailable, the tool should fall back to a local/cached result.', keywords:['fallback','cache','offline','unavailable','resilient'] },
+        { id:'e6', type:'statement', text:'The tool should work correctly even when the input contains special characters or unusual formatting.', keywords:['special','character','unicode','escape','format','encoding'] },
+        { id:'e7', type:'statement', text:'Timeouts should be handled gracefully — the tool should not hang indefinitely.', keywords:['timeout','hang','infinite','loop','stuck','deadline'] },
+        { id:'e8', type:'example', question:'If the user runs the tool on empty input, which behavior do you prefer?',
+          exampleInput:'(empty / blank input)',
+          exampleOutput:'Error: No input provided. Please supply a URL, text, or filename.',
+          hint:'Clear error messages are usually better than silent failures. Swipe YES to confirm.' },
+        { id:'e9', type:'visual', question:'How should the tool handle unexpected input?',
+          diagram:'Option A: Stop and ask the user to fix it\n  → safest, but interrupts flow\n\nOption B: Make a best-guess and note the assumption\n  → faster, but may be wrong\n\nOption C: Return an error with context\n  → explicit, machine-parseable',
+          caption:'Your preference here shapes robustness vs. automation.' },
+        { id:'e10', type:'statement', text:'Sensitive or potentially harmful content in the input should be flagged or rejected.', keywords:['sensitive','harmful','flag','reject','filter','safety'] },
+        { id:'e11', type:'statement', text:'The tool should retry failed operations automatically before reporting an error.', keywords:['retry','automatic','transient','resilient','self-healing'] },
+        { id:'e12', type:'statement', text:'Edge case behavior should be documented clearly for users.', keywords:['document','spec','explain','guide','user','note'] },
+    ],
+    examples: [
+        { id:'x0', type:'statement', text:'The tool\'s output should feel like it was written by a human expert, not an AI.', keywords:['human','expert','natural','tone','voice','quality'] },
+        { id:'x1', type:'statement', text:'Code examples in the output should always be syntax-highlighted or in code blocks.', keywords:['code','syntax','highlight','block','format','example'] },
+        { id:'x2', type:'statement', text:'Examples and documentation should be included in the output to explain how the result was derived.', keywords:['explain','documentation','example','how','derive','reasoning'] },
+        { id:'x3', type:'statement', text:'The style should be formal and professional, suitable for business or technical reports.', keywords:['formal','professional','business','report','technical'] },
+        { id:'x4', type:'statement', text:'The style should be casual and conversational — like a knowledgeable colleague explaining things.', keywords:['casual','conversational','friendly','explain','colleague'] },
+        { id:'x5', type:'statement', text:'Tables should be used instead of bullet points when comparing multiple items.', keywords:['table','compare','matrix','grid','column','row'] },
+        { id:'x6', type:'example', question:'Does this example output match the quality and style you expect?',
+          exampleInput:'Explain what this function does: def fib(n): return n if n<2 else fib(n-1)+fib(n-2)',
+          exampleOutput:'This is a recursive Fibonacci function. It returns `n` directly for base cases (0 or 1), otherwise computes `fib(n-1) + fib(n-2)`. Note: this has O(2^n) time complexity — consider memoization for large inputs.',
+          hint:'If this depth and style matches what you want, swipe YES.' },
+        { id:'x7', type:'example', question:'Or would you prefer a more structured output style?',
+          exampleInput:'Explain what this function does: def fib(n): ...',
+          exampleOutput:'## Function: fib(n)\n**Purpose**: Computes the nth Fibonacci number recursively.\n**Complexity**: O(2^n) time, O(n) space\n**Warning**: Slow for n > 30. Use memoization.',
+          hint:'If structured Markdown with headers fits better, swipe YES.' },
+        { id:'x8', type:'statement', text:'The output should include a confidence level or uncertainty indicator.', keywords:['confidence','uncertain','probability','caveat','sure'] },
+        { id:'x9', type:'statement', text:'Numbered lists should be used when order matters; bullets when it doesn\'t.', keywords:['numbered','ordered','bullet','list','order'] },
+        { id:'x10', type:'statement', text:'The output should always end with a clear next-action recommendation.', keywords:['next','action','recommendation','follow-up','todo'] },
+        { id:'x11', type:'visual', question:'Which length best matches your ideal output?',
+          diagram:'[Micro]  1-3 lines  — a quick answer\n[Short]  1 paragraph — essential info\n[Medium] 3-5 paragraphs — detailed\n[Long]   Full report — comprehensive',
+          caption:'Matching output length to your use case is crucial.' },
+        { id:'x12', type:'statement', text:'The tool should always include a "what was NOT covered" section to note limitations.', keywords:['limitation','not-covered','caveat','scope','disclaimer'] },
+    ],
+};
+
+// ── APP STATE ──────────────────────────────────────────────────────────────
+
+const app = {
+    screen: 'intro',
+    initialPrompt: '',
+    promptTokens: [],
+    spec: {},
+    round: {
+        dimensionIndex: 0,
+        refinementPass: 0,
+        cards: [],
+        cardIndex: 0,
+        yesCount: 0,
+        noCount: 0,
+        decisions: [],
+        askedCardIds: new Set(),
+    },
+    drag: { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, pointerId: null },
+    totalSwiped: 0,
+    roundsCompleted: 0,
+};
+
+// Init spec structure
+DIMENSIONS.forEach(d => {
+    app.spec[d.id] = { confirmed: [], rejected: [], uncertain: false };
+});
+
+// ── UTILITIES ──────────────────────────────────────────────────────────────
+
+function showScreen(id) {
+    document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + id).classList.add('active');
+    app.screen = id;
+}
+
+function tokenize(text) {
+    return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+}
+
+function scoreCard(card, tokens) {
+    if (app.round.askedCardIds.has(card.id)) return -1;
+    let score = 0;
+    if (card.keywords) {
+        card.keywords.forEach(kw => {
+            if (tokens.some(t => t.includes(kw) || kw.includes(t))) score += 2;
+        });
+    }
+    return score;
+}
+
+function selectCards(dimensionId, count) {
+    const bank = QUESTION_BANK[dimensionId];
+    const tokens = app.promptTokens;
+    const scored = bank
+        .map(c => ({ card: c, score: scoreCard(c, tokens) }))
+        .filter(x => x.score >= 0)
+        .sort((a, b) => b.score - a.score);
+
+    // Aim for mix: ~6 statements, ~2 examples, ~2 visuals (best effort from available)
+    const statements = scored.filter(x => x.card.type === 'statement');
+    const examples   = scored.filter(x => x.card.type === 'example');
+    const visuals    = scored.filter(x => x.card.type === 'visual');
+
+    const selected = [];
+    const take = (pool, n) => pool.slice(0, n).forEach(x => selected.push(x.card));
+    take(statements, Math.min(6, statements.length));
+    take(examples, Math.min(2, examples.length));
+    take(visuals, Math.min(2, visuals.length));
+
+    // Fill up to count if needed
+    scored.forEach(x => {
+        if (selected.length < count && !selected.includes(x.card)) selected.push(x.card);
+    });
+
+    return selected.slice(0, count);
+}
+
+// ── SESSION START ──────────────────────────────────────────────────────────
+
+function startSession() {
+    const prompt = document.getElementById('initial-prompt').value.trim();
+    if (!prompt) {
+        document.getElementById('initial-prompt').focus();
+        return;
+    }
+    app.initialPrompt = prompt;
+    app.promptTokens = tokenize(prompt);
+    showScreen('loading');
+    setTimeout(() => beginDimension(0), 800);
+}
+
+function beginDimension(dimIndex) {
+    const dim = DIMENSIONS[dimIndex];
+    app.round.dimensionIndex = dimIndex;
+    app.round.refinementPass = 0;
+    app.round.cards = selectCards(dim.id, 10);
+    app.round.cardIndex = 0;
+    app.round.yesCount = 0;
+    app.round.noCount = 0;
+    app.round.decisions = [];
+    app.round.cards.forEach(c => app.round.askedCardIds.add(c.id));
+    showSwipingScreen();
+}
+
+// ── SWIPING SCREEN ─────────────────────────────────────────────────────────
+
+function showSwipingScreen() {
+    const dim = DIMENSIONS[app.round.dimensionIndex];
+    document.getElementById('dimension-label').textContent = dim.icon + ' ' + dim.label;
+    updateRoundCounter();
+    updateProgressBar();
+    buildYesTally();
+    renderCurrentCard();
+    showScreen('swiping');
+}
+
+function updateRoundCounter() {
+    const idx = app.round.cardIndex;
+    const total = app.round.cards.length;
+    document.getElementById('card-num').textContent = idx + 1;
+    document.getElementById('round-counter').textContent = 'Card ' + (idx + 1) + '/' + total;
+}
+
+function updateProgressBar() {
+    const pct = (app.round.cardIndex / app.round.cards.length) * 100;
+    document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+function buildYesTally() {
+    const tally = document.getElementById('yes-tally');
+    tally.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'tally-dot' + (i < app.round.yesCount ? ' filled' : '');
+        tally.appendChild(dot);
+    }
+}
+
+function renderCurrentCard() {
+    const card = app.round.cards[app.round.cardIndex];
+    if (!card) return;
+
+    // Reset card position
+    const ac = document.getElementById('active-card');
+    ac.style.transform = '';
+    ac.style.transition = '';
+    ac.classList.remove('exit-right', 'exit-left');
+    // Reset overlays
+    ac.querySelector('.card-verdict.yes').style.opacity = 0;
+    ac.querySelector('.card-verdict.no').style.opacity = 0;
+
+    const content = document.getElementById('card-content');
+    content.innerHTML = buildCardHTML(card);
+}
+
+function buildCardHTML(card) {
+    const dim = DIMENSIONS[app.round.dimensionIndex];
+    const tagLabel = dim.icon + ' ' + dim.label;
+
+    if (card.type === 'statement') {
+        return `<div class="card-tag">${tagLabel}</div>
+<div class="card-question">${card.text}</div>
+<p class="card-hint">Swipe YES to confirm, NO to reject this as part of your spec.</p>`;
+    }
+
+    if (card.type === 'example') {
+        return `<div class="card-tag">${tagLabel} · Example</div>
+<div class="card-question">${card.question}</div>
+<div class="card-example-box">
+  <div class="card-example-label">Input</div>
+  <div class="card-example-text">${escHtml(card.exampleInput)}</div>
+  <div class="card-example-label">Output</div>
+  <div class="card-example-text output">${escHtml(card.exampleOutput)}</div>
+</div>
+<p class="card-hint">${card.hint}</p>`;
+    }
+
+    if (card.type === 'visual') {
+        return `<div class="card-tag">${tagLabel} · Scenario</div>
+<div class="card-question">${card.question}</div>
+<pre class="card-diagram">${escHtml(card.diagram)}</pre>
+<p class="card-hint">${card.caption}</p>`;
+    }
+
+    return '';
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── DRAG MECHANICS ─────────────────────────────────────────────────────────
+
+const SWIPE_THRESHOLD = 100;
+
+(function initDrag() {
+    const card = document.getElementById('active-card');
+    card.addEventListener('pointerdown', onPD);
+    card.addEventListener('pointermove', onPM);
+    card.addEventListener('pointerup', onPU);
+    card.addEventListener('pointercancel', onPU);
+})();
+
+function onPD(e) {
+    if (app.screen !== 'swiping') return;
+    const card = document.getElementById('active-card');
+    card.setPointerCapture(e.pointerId);
+    app.drag = { active: true, startX: e.clientX, startY: e.clientY,
+                 currentX: e.clientX, currentY: e.clientY, pointerId: e.pointerId };
+}
+
+function onPM(e) {
+    if (!app.drag.active) return;
+    app.drag.currentX = e.clientX;
+    app.drag.currentY = e.clientY;
+    const dx = app.drag.currentX - app.drag.startX;
+    const dy = app.drag.currentY - app.drag.startY;
+    const rotate = dx * 0.08;
+    const card = document.getElementById('active-card');
+    card.style.transition = 'none';
+    card.style.transform = `translate(${dx}px, ${dy * 0.3}px) rotate(${rotate}deg)`;
+
+    const ratio = Math.min(Math.abs(dx) / SWIPE_THRESHOLD, 1);
+    const yesOverlay = card.querySelector('.card-verdict.yes');
+    const noOverlay  = card.querySelector('.card-verdict.no');
+    if (dx > 0) { yesOverlay.style.opacity = ratio; noOverlay.style.opacity = 0; }
+    else        { noOverlay.style.opacity = ratio;  yesOverlay.style.opacity = 0; }
+}
+
+function onPU(e) {
+    if (!app.drag.active) return;
+    app.drag.active = false;
+    const dx = app.drag.currentX - app.drag.startX;
+    if (Math.abs(dx) > SWIPE_THRESHOLD) {
+        commitSwipe(dx > 0 ? 'yes' : 'no');
+    } else {
+        snapBack();
+    }
+}
+
+function snapBack() {
+    const card = document.getElementById('active-card');
+    card.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+    card.style.transform = '';
+    const yesOverlay = card.querySelector('.card-verdict.yes');
+    const noOverlay  = card.querySelector('.card-verdict.no');
+    yesOverlay.style.opacity = 0;
+    noOverlay.style.opacity = 0;
+}
+
+function commitSwipe(verdict) {
+    const card = document.getElementById('active-card');
+    card.classList.add(verdict === 'yes' ? 'exit-right' : 'exit-left');
+    card.addEventListener('animationend', () => {
+        recordDecisionInternal(verdict);
+    }, { once: true });
+}
+
+// ── DECISION FLOW ──────────────────────────────────────────────────────────
+
+function recordDecision(verdict) {
+    if (app.screen !== 'swiping') return;
+    commitSwipe(verdict);
+}
+
+function recordDecisionInternal(verdict) {
+    const card = app.round.cards[app.round.cardIndex];
+    app.round.decisions.push({ cardId: card.id, verdict });
+    app.totalSwiped++;
+
+    if (verdict === 'yes') {
+        app.round.yesCount++;
+        // Store confirmed text/content
+        const text = card.type === 'statement' ? card.text :
+                     card.type === 'example'   ? ('Example — Input: ' + card.exampleInput + ' / Output: ' + card.exampleOutput) :
+                                                 (card.caption || card.question);
+        app.spec[DIMENSIONS[app.round.dimensionIndex].id].confirmed.push(text);
+    } else {
+        const text = card.type === 'statement' ? card.text : (card.caption || card.question);
+        app.spec[DIMENSIONS[app.round.dimensionIndex].id].rejected.push(text);
+    }
+
+    app.round.cardIndex++;
+
+    // Update tally dots
+    buildYesTally();
+
+    // Check early-exit: 5 YES
+    if (app.round.yesCount >= 5) {
+        flashConfirmed();
+        setTimeout(() => evaluateRound(), 600);
+        return;
+    }
+
+    // Check if all cards shown
+    if (app.round.cardIndex >= app.round.cards.length) {
+        evaluateRound();
+        return;
+    }
+
+    updateRoundCounter();
+    updateProgressBar();
+    renderCurrentCard();
+}
+
+function flashConfirmed() {
+    const stack = document.getElementById('card-stack');
+    stack.classList.add('confirmed-flash');
+    stack.addEventListener('animationend', () => stack.classList.remove('confirmed-flash'), { once: true });
+}
+
+function evaluateRound() {
+    app.roundsCompleted++;
+    const dimId = DIMENSIONS[app.round.dimensionIndex].id;
+    if (app.round.yesCount >= 5) {
+        // Confirmed — show summary and continue
+        showSummaryScreen(true);
+    } else if (app.round.refinementPass < 2) {
+        // Try refinement round
+        app.round.refinementPass++;
+        const dim = DIMENSIONS[app.round.dimensionIndex];
+        const newCards = selectCards(dimId, 10);
+        if (newCards.length === 0) {
+            app.spec[dimId].uncertain = true;
+            showSummaryScreen(false);
+        } else {
+            app.round.cards = newCards;
+            app.round.cardIndex = 0;
+            app.round.yesCount = 0;
+            app.round.noCount = 0;
+            app.round.decisions = [];
+            newCards.forEach(c => app.round.askedCardIds.add(c.id));
+            showSwipingScreen();
+        }
+    } else {
+        // Mark uncertain
+        app.spec[dimId].uncertain = true;
+        showSummaryScreen(false);
+    }
+}
+
+// ── SUMMARY SCREEN ─────────────────────────────────────────────────────────
+
+function showSummaryScreen(confirmed) {
+    const dim = DIMENSIONS[app.round.dimensionIndex];
+    const specDim = app.spec[dim.id];
+    const isLast = app.round.dimensionIndex >= DIMENSIONS.length - 1;
+
+    let html = `<div class="summary-title">${dim.icon} ${dim.label} — ${confirmed ? '✅ Confirmed' : '⚠️ Uncertain'}</div>`;
+
+    if (specDim.confirmed.length) {
+        html += `<div class="summary-section-label">Confirmed (YES)</div>`;
+        specDim.confirmed.forEach(t => {
+            html += `<div class="summary-item"><span class="dot" style="color:var(--yes-color)">●</span><span>${escHtml(t.length > 100 ? t.slice(0,100)+'…' : t)}</span></div>`;
+        });
+    }
+
+    if (specDim.rejected.length) {
+        html += `<div class="summary-section-label">Excluded (NO)</div>`;
+        specDim.rejected.slice(0, 3).forEach(t => {
+            html += `<div class="summary-item"><span class="dot" style="color:var(--no-color)">●</span><span>${escHtml(t.length > 100 ? t.slice(0,100)+'…' : t)}</span></div>`;
+        });
+    }
+
+    if (!confirmed) {
+        html += `<div style="margin-top:14px;font-size:0.82rem;color:var(--muted);">Not enough signal gathered. This section will be marked TBD in the spec.</div>`;
+    }
+
+    document.getElementById('summary-content').innerHTML = html;
+
+    // Update continue button label
+    const continueBtn = document.querySelector('#screen-summary .btn-primary');
+    if (isLast) {
+        continueBtn.textContent = 'Generate Spec →';
+    } else {
+        const next = DIMENSIONS[app.round.dimensionIndex + 1];
+        continueBtn.textContent = `Next: ${next.icon} ${next.label} →`;
+    }
+
+    showScreen('summary');
+}
+
+function nextDimension() {
+    const nextIndex = app.round.dimensionIndex + 1;
+    if (nextIndex >= DIMENSIONS.length) {
+        generateOutput();
+    } else {
+        showScreen('loading');
+        setTimeout(() => beginDimension(nextIndex), 400);
+    }
+}
+
+function retryDimension() {
+    const dimId = DIMENSIONS[app.round.dimensionIndex].id;
+    // Reset this dimension's data
+    app.spec[dimId] = { confirmed: [], rejected: [], uncertain: false };
+    app.round.askedCardIds = new Set();
+    showScreen('loading');
+    setTimeout(() => beginDimension(app.round.dimensionIndex), 400);
+}
+
+// ── SPEC GENERATION ─────────────────────────────────────────────────────────
+
+function generateOutput() {
+    const md = buildMarkdown();
+    document.getElementById('spec-output').textContent = md;
+    showScreen('output');
+}
+
+function buildMarkdown() {
+    const title = deriveTitle();
+    const now = new Date().toISOString().split('T')[0];
+    const lines = [];
+
+    lines.push(`# Agent/Skill Specification: ${title}`);
+    lines.push(`\n> Generated by Spec Builder on ${now}`);
+    lines.push('');
+
+    DIMENSIONS.forEach(dim => {
+        const s = app.spec[dim.id];
+        lines.push(`## ${dim.icon} ${dim.label}`);
+
+        if (s.uncertain || s.confirmed.length === 0) {
+            lines.push('_TBD — not enough signal gathered during the session._');
+        } else {
+            s.confirmed.forEach(item => lines.push('- ' + item));
+        }
+        lines.push('');
+    });
+
+    lines.push('---');
+    lines.push(`*Initial prompt: "${app.initialPrompt}"*`);
+    lines.push(`*Rounds completed: ${app.roundsCompleted} · Cards swiped: ${app.totalSwiped} · Confirmed dimensions: ${countConfirmed()}/${DIMENSIONS.length}*`);
+
+    return lines.join('\n');
+}
+
+function deriveTitle() {
+    const prompt = app.initialPrompt;
+    const words = prompt.split(/\s+/).slice(0, 6).join(' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function countConfirmed() {
+    return DIMENSIONS.filter(d => !app.spec[d.id].uncertain && app.spec[d.id].confirmed.length > 0).length;
+}
+
+// ── OUTPUT ACTIONS ─────────────────────────────────────────────────────────
+
+function copySpec() {
+    const text = document.getElementById('spec-output').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.output-actions button');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+    });
+}
+
+function downloadSpec() {
+    const text = document.getElementById('spec-output').textContent;
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'spec.md';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function startOver() {
+    app.initialPrompt = '';
+    app.promptTokens = [];
+    app.totalSwiped = 0;
+    app.roundsCompleted = 0;
+    DIMENSIONS.forEach(d => { app.spec[d.id] = { confirmed: [], rejected: [], uncertain: false }; });
+    app.round = {
+        dimensionIndex: 0, refinementPass: 0,
+        cards: [], cardIndex: 0,
+        yesCount: 0, noCount: 0, decisions: [],
+        askedCardIds: new Set(),
+    };
+    document.getElementById('initial-prompt').value = '';
+    showScreen('intro');
+}
+
+// ── KEYBOARD ──────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+    if (app.screen !== 'swiping') return;
+    if (e.key === 'ArrowRight' || e.key === 'y' || e.key === 'Y') recordDecision('yes');
+    if (e.key === 'ArrowLeft'  || e.key === 'n' || e.key === 'N') recordDecision('no');
+});
+
+// ── DEV MENU ──────────────────────────────────────────────────────────────
+
+function toggleDevMenu() {
+    document.getElementById('dev-menu').classList.toggle('active');
+}
+
+document.addEventListener('click', e => {
+    const menu = document.getElementById('dev-menu');
+    const btn = document.getElementById('dev-btn');
+    if (!menu.contains(e.target) && e.target !== btn) menu.classList.remove('active');
+});
+
+function copyAIPrompt() {
+    const prompt = `# Specification: Spec Builder
+
+## Meta
+- **Version**: 1.0.0
+- **Created**: 2026-06-10
+- **Model**: Claude Sonnet 4.6
+- **Target**: \`src/spec-builder.html\`
+
+## Description
+An interactive tool for building Claude agent/skill/tool specifications using a Tinder-style swipe card Q&A flow.
+
+## Features
+- **Tinder-style swipe UX**: Cards can be swiped right (YES) or left (NO) using mouse drag, touch, or keyboard arrows
+- **7 spec dimensions**: Core Purpose, Input & Triggers, Output Format, Behavior & Rules, Constraints & Limits, Edge Cases, Examples & Style
+- **5-of-10 convergence**: Each dimension round shows 10 cards; 5 YES swipes confirms the dimension
+- **Refinement passes**: If fewer than 5 YES, the tool retries with different questions (max 2 passes)
+- **Card types**: Statements, example input/output pairs, visual ASCII diagrams
+- **YES tally**: 5 dot indicators show progress toward the 5/10 goal
+- **Spec output**: Generates a downloadable Markdown specification document
+- **Copy & Download**: Copy to clipboard or download as .md file
+
+## Technical Stack
+- **Frontend**: HTML5, CSS3, Vanilla JavaScript (no frameworks)
+- **Interaction**: Pointer Events API with setPointerCapture for unified mouse/touch handling`;
+
+    navigator.clipboard.writeText(prompt).then(() => {
+        alert('Specification copied to clipboard!');
+        toggleDevMenu();
+    });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+
+showScreen('intro');
+</script>
+</body>
+</html>

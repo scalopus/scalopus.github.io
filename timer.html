@@ -265,13 +265,12 @@
             <span>📂</span> View Source Code
         </a>
         <button class="dev-item" onclick="copyAIPrompt()">
-            <span>🤖</span> AI Prompt of this application
+            <span>🤖</span> AI Prompt
         </button>
-        
         <div class="dev-label">Tool Information</div>
-        <div class="dev-info">Version: 1.1.0</div>
-        <div class="dev-info">Created: 2026-06-05</div>
-        <div class="dev-info">Model: Gemini 3 Flash Preview</div>
+        <div style="font-size: 0.8rem; color: #888; padding: 0 8px;">Version: 1.1.0</div>
+        <div style="font-size: 0.8rem; color: #888; padding: 0 8px;">Created: 2026-06-05</div>
+        <div style="font-size: 0.8rem; color: #888; padding: 0 8px;">Model: Gemini 3 Flash Preview</div>
     </div>
 
     <script>
@@ -383,14 +382,34 @@
         }
 
         function copyAIPrompt() {
-            const prompt = `Create a single-file HTML countdown timer application with a full-screen black background. 
-Include a large central timer display (tabular-nums), a control bar at the bottom with quick-set buttons (+30s, +1m, +2m, +5m, +10m), and a manual MM:SS input field. 
-Features should include a 'Reset' button, a toggleable 'Last 10s Cue' (visual pulse), and a toggleable 'Ending Sound' (3 beeps using Web Audio API). 
-Add a developer menu in the bottom-right and a home link in the bottom-left. 
-The design should be minimal and high-contrast (white text on black).`;
+            const prompt = `# Specification: Countdown Timer Tool
+
+## Overview
+A minimal, full-screen countdown timer designed for high visibility and quick interaction.
+
+## Metadata
+- **Version**: 1.1.0
+- **Created Date**: 2026-06-05
+- **LLM Model**: Gemini 3 Flash Preview
+
+## Technical Stack
+- **Frontend**: Pure HTML5, CSS3, Vanilla JavaScript.
+- **Audio**: Web Audio API (Sine wave oscillator) for hardware-independent alerts.
+- **Iconography**: Emoji-based (🏠, 🛠️, 🤖, 📂).
+
+## Key Features
+1. **High-Visibility Display**: Massive \`25vw\` font size with \`tabular-nums\` for consistent alignment.
+2. **Quick Set Buttons**: Single-click additions for +30s, +1m, +2m, +5m, and +10m.
+3. **Manual Input**: Direct \`MM:SS\` entry for specific durations.
+4. **Visual Cues**: Red pulsing background/text during the final 10 seconds.
+5. **Audio Alerts**: 3 progressive beeps (880Hz and 1100Hz) during the final 3 seconds.
+6. **Developer Utilities**: Standard Scalopus developer menu and home link.
+
+## Future AI Prompt
+"Create a single-file HTML countdown timer application with a full-screen black background. Include a large central timer display (tabular-nums), a control bar at the bottom with quick-set buttons (+30s, +1m, +2m, +5m, +10m), and a manual MM:SS input field. Features should include a 'Reset' button, a toggleable 'Last 10s Cue' (visual pulse), and a toggleable 'Ending Sound' (3 beeps using Web Audio API). Add a developer menu in the bottom-right and a home link in the bottom-left. The design should be minimal and high-contrast (white text on black)."`;
             
             navigator.clipboard.writeText(prompt).then(() => {
-                alert("AI Prompt copied to clipboard!");
+                alert("Specification copied to clipboard!");
                 toggleDevMenu();
             }).catch(err => {
                 console.error('Could not copy text: ', err);

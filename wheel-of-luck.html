@@ -404,13 +404,17 @@ Heidi</textarea>
     <button id="dev-btn" class="bottom-icon" onclick="toggleDevMenu()">🛠️</button>
 
     <div id="dev-menu">
-        <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Console Access</div>
-        <div style="font-size: 0.7rem; color: var(--trek-blue); margin-bottom: 0.5rem; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 0.5rem;">
-            v1.0.0 | 2026-06-06<br>
-            Gemini 3 Flash Preview
-        </div>
-        <a href="https://github.com/scalopus/scalopus.github.io/blob/main/wheel-of-luck.html" target="_blank" class="dev-item">📂 View Source Code</a>
-        <button class="dev-item" onclick="copyAIPrompt()">🤖 Copy AI Prompt</button>
+        <div class="dev-label">Developer Options</div>
+        <a href="https://github.com/scalopus/scalopus.github.io/blob/main/wheel-of-luck.html" target="_blank" class="dev-item">
+            <span>📂</span> View Source Code
+        </a>
+        <button class="dev-item" onclick="copyAIPrompt()">
+            <span>🤖</span> AI Prompt
+        </button>
+        <div class="dev-label">Tool Information</div>
+        <div style="font-size: 0.8rem; color: #888; padding: 0 8px;">Version: 1.0.0</div>
+        <div style="font-size: 0.8rem; color: #888; padding: 0 8px;">Created: 2026-06-06</div>
+        <div style="font-size: 0.8rem; color: #888; padding: 0 8px;">Model: Gemini 3 Flash Preview</div>
     </div>
 
     <script>
@@ -615,20 +619,25 @@ Heidi</textarea>
         }
 
         function copyAIPrompt() {
-            const prompt = `Create a single-page HTML random picker with a Star Trek (LCARS) space theme.
-Features:
-- Title: "วงแหวนชะตาลิขิต" displayed in center marker initially.
-- Viewport: Wide immersive stage filling 80-90% of screen.
-- Animation: 10s suspense reel (Fast to Slow) using Quintic Easing Out.
-- Marker: Gold horizontal lines highlighting the winner.
-- Support: Long names up to 30 characters with responsive scaling.
-- Control: Floating pill-shaped bottom bar for Edit/Presets/Audio.
-- Background: Dynamic starfield with 450 moving stars.
-- Sound: Synthetic computer ticks and victory fanfare.
-- Storage: LocalStorage for personnel list presets.
-- Mobile: Fully responsive design with dynamic centering logic.`;
-            navigator.clipboard.writeText(prompt);
-            alert('Mission parameters copied to console!');
+            const prompt = `# Specification: Wheel of Luck (Luck Picker)
+
+## Overview
+The "Wheel of Luck" (วงแหวนชะตาลิขิต) is a Star Trek (LCARS) themed random selection tool. It features a high-velocity vertical reel animation that slows down over 10 seconds to reveal a winner.
+
+## Features
+- **Branding**: Title "วงแหวนชะตาลิขิต" displayed as initial placeholder.
+- **Stage & Reel**: Large immersive stage filling 80-90% of screen; vertical reel supporting long names.
+- **Randomizer Logic**: 10-second suspense duration with Quintic Easing Out.
+- **Audio/Visual**: Synthetic computer ticks (Web Audio API), pulsing "ENGAGE" button, starfield background, and confetti.
+- **Management**: Floating pill-shaped bottom bar, Personnel Database (Edit Modal), and LocalStorage presets.
+- **Mobile Optimized**: Responsive design supporting small mobile devices.
+
+## Future AI Prompt
+"Create a single-page HTML random picker with a Star Trek (LCARS) space theme. Features: Title: 'วงแหวนชะตาลิขิต' displayed in center marker initially. Viewport: Wide immersive stage filling 80-90% of screen. Animation: 10s suspense reel (Fast to Slow) using Quintic Easing Out. Marker: Gold horizontal lines highlighting the winner. Support: Long names up to 30 characters with responsive scaling. Control: Floating pill-shaped bottom bar for Edit/Presets/Audio. Background: Dynamic starfield with 450 moving stars. Sound: Synthetic computer ticks and victory fanfare. Storage: LocalStorage for personnel list presets. Mobile: Fully responsive design with dynamic centering logic."`;
+            navigator.clipboard.writeText(prompt).then(() => {
+                alert('Specification copied to clipboard!');
+                toggleDevMenu();
+            });
         }
 
         initStars();
