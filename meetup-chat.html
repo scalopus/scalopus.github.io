@@ -3,7 +3,7 @@
     Version: 1.1.0
     Created: 2026-06-27
     Model: Claude Sonnet 4.6
-    Description: P2P meetup chat with host projector view, voting, moderator controls, delete/ban, and URL auto-linking using WebRTC (PeerJS).
+    Description: P2P meetup chat with host projector view (2-row: questions 60% / chat+QR 40%), voting, moderator controls, delete/ban, and URL auto-linking using WebRTC (PeerJS).
     Specification: specs/meetup-chat-spec.md
 -->
 <!DOCTYPE html>
@@ -102,6 +102,9 @@
         /* ── APP SCREEN ── */
         #app-screen {
             display: none; flex-direction: column; height: 100vh; overflow: hidden;
+        }
+        @media (max-width: 768px) {
+            #app-screen { height: 100dvh; }
         }
 
         #app-header {
@@ -215,6 +218,7 @@
             padding: 12px 16px 64px; background: rgba(255,255,255,0.04);
             border-top: 1px solid var(--border); display: flex; gap: 10px;
             flex-shrink: 0; align-items: flex-end;
+            position: sticky; bottom: 0;
         }
 
         #chat-textarea {
@@ -258,14 +262,14 @@
         .proj-exit-btn:hover { background: #333; }
 
         #proj-split {
-            flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden;
+            flex: 1; display: grid; grid-template-rows: 60fr 40fr; overflow: hidden;
         }
 
         .proj-panel {
             display: flex; flex-direction: column; overflow: hidden;
-            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
         }
-        .proj-panel:last-child { border-right: none; }
+        .proj-panel:last-child { border-bottom: none; }
 
         .proj-panel-header {
             padding: 12px 20px; background: rgba(255,255,255,0.04);
@@ -324,18 +328,7 @@
         .proj-stream-sender .clickable-name:hover { color: var(--accent); }
         .proj-stream-text { font-size: 0.9rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255,255,255,0.9); }
 
-        /* QR corner in projector */
-        #proj-qr-corner {
-            position: absolute; bottom: 18px; right: 18px;
-            background: white; padding: 18px; border-radius: 12px;
-            display: flex; flex-direction: column; align-items: center; gap: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 10;
-        }
-        #proj-qr-corner canvas, #proj-qr-corner img { display: block; }
-        .proj-qr-label {
-            font-size: 0.6rem; color: #333; font-weight: 700; text-align: center;
-            letter-spacing: 0.5px; text-transform: uppercase;
-        }
+        #proj-qr-code canvas, #proj-qr-code img { display: block; }
 
         /* ── QR MODAL ── */
         #qr-modal {
@@ -395,10 +388,6 @@
             .bottom-icon { position: relative; bottom: auto; left: auto; right: auto; opacity: 0.8; padding: 4px; font-size: 1.2rem; }
             .desktop-only { display: none !important; }
             .mobile-nav { display: flex !important; gap: 4px; }
-            #proj-split { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-            .proj-panel { border-right: none; border-bottom: 1px solid var(--border); }
-            .proj-panel:last-child { border-bottom: none; }
-            #proj-qr-corner { display: none; }
             #chat-input-bar { padding-bottom: env(safe-area-inset-bottom, 12px); }
         }
 
@@ -499,7 +488,7 @@
 
     <div id="proj-split">
         <div class="proj-panel">
-            <div class="proj-panel-header">🏆 คำถามยอดนิยม</div>
+            <div class="proj-panel-header">📌 คำถาม</div>
             <div id="proj-top-questions">
                 <div class="empty-state">
                     <div class="empty-state-icon">📌</div>
@@ -507,20 +496,21 @@
                 </div>
             </div>
         </div>
-        <div class="proj-panel">
-            <div class="proj-panel-header">💬 แชทสด</div>
-            <div id="proj-chat-stream">
-                <div class="empty-state">
-                    <div class="empty-state-icon">💬</div>
-                    <div class="empty-state-text">ข้อความสดจะปรากฏที่นี่</div>
+        <div class="proj-panel" style="display:grid;grid-template-columns:70fr 30fr;overflow:hidden;">
+            <div style="display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border);">
+                <div class="proj-panel-header">💬 แชทสด</div>
+                <div id="proj-chat-stream">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💬</div>
+                        <div class="empty-state-text">ข้อความสดจะปรากฏที่นี่</div>
+                    </div>
                 </div>
             </div>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:white;padding:18px;gap:10px;min-width:0;">
+                <div id="proj-qr-code"></div>
+                <div style="font-size:0.65rem;color:#333;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;text-align:center;">สแกนเพื่อเข้าร่วม</div>
+            </div>
         </div>
-    </div>
-
-    <div id="proj-qr-corner">
-        <div id="proj-qr-code"></div>
-        <div class="proj-qr-label">สแกนเพื่อเข้าร่วม</div>
     </div>
 </div>
 
@@ -1115,9 +1105,12 @@
     function generateProjQR() {
         const box = document.getElementById('proj-qr-code');
         box.innerHTML = '';
+        const panel = box.closest('[style*="background:white"]') || box.parentElement;
+        const available = panel ? Math.max(80, panel.clientHeight - 60) : 240;
+        const size = Math.min(available, panel ? panel.clientWidth - 36 : 240);
         new QRCode(box, {
             text: window.location.href,
-            width: 400, height: 400,
+            width: size, height: size,
             colorDark: '#000000', colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.H
         });
