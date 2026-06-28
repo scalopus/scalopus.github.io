@@ -750,6 +750,7 @@
                 if (data.moderatorId === myId) {
                     isModerator = true;
                     showRoleBadge('mod');
+                    document.getElementById('proj-mode-btn').style.display = '';
                 }
                 currentModeratorId = data.moderatorId;
                 renderMessages();
@@ -796,6 +797,8 @@
                 if (data.targetPeerId === myId) {
                     isModerator = true;
                     showRoleBadge('mod');
+                    document.getElementById('proj-mode-btn').style.display = '';
+                    renderMessages();
                 }
                 currentModeratorId = data.targetPeerId;
                 break;
@@ -893,13 +896,13 @@
 
     // ── HOST ──
     function assignModerator(targetPeerId) {
-        if (!isHost || targetPeerId === myId) return;
+        if ((!isHost && !isModerator) || targetPeerId === myId) return;
         currentModeratorId = targetPeerId;
         broadcast({ type: 'assign-moderator', targetPeerId });
     }
 
     function markDone(msgId) {
-        if (!isHost) return;
+        if (!isHost && !isModerator) return;
         const msg = messages[msgId];
         if (!msg) return;
         msg.done = true;
@@ -923,7 +926,7 @@
         event.stopPropagation();
         targetMenuPeerId = peerId;
         const menu = document.getElementById('name-menu');
-        document.getElementById('nm-assign').style.display = isHost ? '' : 'none';
+        document.getElementById('nm-assign').style.display = (isHost || isModerator) ? '' : 'none';
         menu.style.display = 'flex';
         menu.style.flexDirection = 'column';
         const x = Math.min(event.clientX, window.innerWidth - 210);
@@ -938,7 +941,7 @@
     }
 
     function doAssignModerator() {
-        if (!isHost || !targetMenuPeerId) return;
+        if ((!isHost && !isModerator) || !targetMenuPeerId) return;
         currentModeratorId = targetMenuPeerId;
         broadcast({ type: 'assign-moderator', targetPeerId: targetMenuPeerId });
         hideNameMenu();
@@ -981,7 +984,7 @@
         const voteCount = Object.keys(msg.votes).length;
         const hasVoted = !!msg.votes[myId];
         const canPin = (isModerator || isHost) && !msg.pinned;
-        const canDone = isHost && msg.pinned && !msg.done;
+        const canDone = (isHost || isModerator) && msg.pinned && !msg.done;
         const isMe = msg.senderId === myId;
         const isClickableName = (isHost || isModerator) && !isMe;
         const canDelete = (isHost || isModerator) && !isMe;
@@ -1046,7 +1049,7 @@
                     <div class="tq-text">${linkifyHtml(escapeHtml(msg.text))}</div>
                     <div class="tq-vote">👍 ${voteCount} โหวต</div>
                 </div>
-                ${isHost ? `<button class="tq-done-btn" onclick="markDone('${msg.id}')" title="เสร็จแล้ว">✅ เสร็จแล้ว</button>` : ''}
+                ${(isHost || isModerator) ? `<button class="tq-done-btn" onclick="markDone('${msg.id}')" title="เสร็จแล้ว">✅ เสร็จแล้ว</button>` : ''}
             `;
             container.appendChild(item);
         });
@@ -1066,7 +1069,7 @@
         stream.innerHTML = '';
         recent.forEach(msg => {
             const tagInfo = TAG_META[msg.senderTag] || { icon: '👤', label: '' };
-            const isClickable = isHost && msg.senderId !== myId;
+            const isClickable = (isHost || isModerator) && msg.senderId !== myId;
             const item = document.createElement('div');
             item.className = 'proj-stream-msg';
             item.innerHTML = `
@@ -1086,8 +1089,9 @@
 
     // ── PROJECTOR MODE ──
     function toggleProjectorMode() {
-        if (!isHost) return;
+        if (!isHost && !isModerator) return;
         projectorOpen = true;
+        document.getElementById('proj-room-badge').textContent = `ROOM: ${roomId}`;
         document.getElementById('app-screen').style.display = 'none';
         document.getElementById('projector-screen').style.display = 'flex';
 
