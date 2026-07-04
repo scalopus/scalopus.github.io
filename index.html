@@ -1,21 +1,154 @@
+<!--
+    Application: Scalopus Landing Page
+    Version: 2.0.0
+    Created: 2026-07-04
+    Model: Claude Sonnet 5
+    Description: Dark-theme catalog landing page linking to all Scalopus tools
+    Specification: specs/landing-page-spec.md
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scalopus</title>
-    <link rel="stylesheet" href="style.css">
+    <style>
+        :root {
+            --bg-color: #0d0f12;
+            --surface-color: #181b20;
+            --border-color: #2a2e35;
+            --text-color: #f2f2f2;
+            --muted-color: #9aa0a8;
+            --accent-color: #0070f3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+
+        main {
+            width: 100%;
+            max-width: 1000px;
+            padding: 3rem 1.5rem 4rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0 0 0.5rem;
+        }
+
+        .tagline {
+            color: var(--muted-color);
+            font-size: 1.05rem;
+            margin: 0;
+        }
+
+        .catalog {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .tool-card {
+            display: block;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .tool-card:hover,
+        .tool-card:focus-visible {
+            transform: translateY(-4px);
+            border-color: var(--accent-color);
+            box-shadow: 0 8px 24px rgba(0, 112, 243, 0.2);
+        }
+
+        .tool-icon {
+            font-size: 2rem;
+            line-height: 1;
+            display: block;
+            margin-bottom: 0.75rem;
+        }
+
+        .tool-icon svg {
+            width: 2rem;
+            height: 2rem;
+            display: block;
+            stroke: var(--text-color);
+        }
+
+        .tool-name {
+            font-weight: 700;
+            font-size: 1.15rem;
+            margin: 0 0 0.35rem;
+        }
+
+        .tool-desc {
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        @media (max-width: 600px) {
+            .catalog {
+                grid-template-columns: 1fr;
+            }
+
+            main {
+                padding: 2rem 1rem 3rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <main>
-        <h1>Welcome</h1>
-        <div id="tool-list">
-            <ul style="list-style: none; padding: 0;">
-                <li><a href="timer.html" style="color: var(--accent-color); text-decoration: none; font-size: 1.2rem;">⏱️ Countdown Timer</a></li>
-                <li><a href="agile-poker.html" style="color: var(--accent-color); text-decoration: none; font-size: 1.2rem;">🃏 Agile Poker (P2P)</a></li>
-                <li><a href="wheel-of-luck.html" style="color: var(--accent-color); text-decoration: none; font-size: 1.2rem;">🎡 Wheel of Luck</a></li>
-                <li><a href="qr-generator.html" style="color: var(--accent-color); text-decoration: none; font-size: 1.2rem; display: inline-flex; align-items: center; gap: 8px;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+        <header>
+            <h1>Scalopus</h1>
+            <p class="tagline">A catalog of quick, single-file tools.</p>
+        </header>
+        <div class="catalog">
+            <a href="timer.html" class="tool-card">
+                <span class="tool-icon">⏱️</span>
+                <p class="tool-name">Countdown Timer</p>
+                <p class="tool-desc">Simple countdown timer for meetings and sessions.</p>
+            </a>
+            <a href="agile-poker.html" class="tool-card">
+                <span class="tool-icon">🃏</span>
+                <p class="tool-name">Agile Poker</p>
+                <p class="tool-desc">Peer-to-peer planning poker for estimation sessions.</p>
+            </a>
+            <a href="wheel-of-luck.html" class="tool-card">
+                <span class="tool-icon">🎡</span>
+                <p class="tool-name">Wheel of Luck</p>
+                <p class="tool-desc">Spin a customizable wheel to pick a random winner.</p>
+            </a>
+            <a href="qr-generator.html" class="tool-card">
+                <span class="tool-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="3" width="7" height="7"></rect>
                         <rect x="14" y="3" width="7" height="7"></rect>
                         <rect x="14" y="14" width="7" height="7"></rect>
@@ -25,13 +158,22 @@
                         <path d="M7 17h.01"></path>
                         <path d="M17 17h.01"></path>
                     </svg>
-                    QR Generator
-                </a></li>
-                <li><a href="claude-usage.html" style="color: var(--accent-color); text-decoration: none; font-size: 1.2rem;">📊 Claude API Usage</a></li>
-                <li><a href="meetup-chat.html" style="color: var(--accent-color); text-decoration: none; font-size: 1.2rem;">💬 Meetup Chat (P2P)</a></li>
-            </ul>
+                </span>
+                <p class="tool-name">QR Generator</p>
+                <p class="tool-desc">Generate QR codes instantly as you type.</p>
+            </a>
+            <a href="claude-usage.html" class="tool-card">
+                <span class="tool-icon">📊</span>
+                <p class="tool-name">Claude API Usage</p>
+                <p class="tool-desc">Estimate and track Claude API usage costs.</p>
+            </a>
+            <a href="meetup-chat.html" class="tool-card">
+                <span class="tool-icon">💬</span>
+                <p class="tool-name">Meetup Chat</p>
+                <p class="tool-desc">Peer-to-peer chat room for live meetups.</p>
+            </a>
         </div>
     </main>
-    <script src="main.js"></script>
 </body>
 </html>
+</content>
