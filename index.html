@@ -1,9 +1,9 @@
 <!--
     Application: Scalopus Landing Page
-    Version: 2.0.0
+    Version: 3.0.0
     Created: 2026-07-04
     Model: Claude Sonnet 5
-    Description: Dark-theme catalog landing page linking to all Scalopus tools
+    Description: Field-kit styled catalog landing page linking to all Scalopus tools
     Specification: specs/landing-page-spec.md
 -->
 <!DOCTYPE html>
@@ -14,22 +14,29 @@
     <title>Scalopus</title>
     <style>
         :root {
-            --bg-color: #0d0f12;
-            --surface-color: #181b20;
-            --border-color: #2a2e35;
-            --text-color: #f2f2f2;
-            --muted-color: #9aa0a8;
-            --accent-color: #0070f3;
+            --bg-color: #131110;
+            --panel-color: #1c1a17;
+            --line-color: #3a3530;
+            --text-color: #ece6d9;
+            --muted-color: #988f80;
+            --accent-color: #e2a33f;
+            --hole-color: #0c0a09;
         }
 
         * {
             box-sizing: border-box;
         }
 
+        html {
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
             background-color: var(--bg-color);
+            background-image: radial-gradient(var(--line-color) 1px, transparent 1px);
+            background-size: 26px 26px;
             color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             margin: 0;
             min-height: 100vh;
             display: flex;
@@ -38,74 +45,140 @@
 
         main {
             width: 100%;
-            max-width: 1000px;
-            padding: 3rem 1.5rem 4rem;
+            max-width: 980px;
+            padding: 4rem 1.5rem 5rem;
         }
 
         header {
-            text-align: center;
-            margin-bottom: 2.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .eyebrow {
+            font-family: "SF Mono", "Menlo", "Consolas", monospace;
+            font-size: 0.78rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--accent-color);
+            margin: 0 0 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 20px;
+            height: 1px;
+            background: var(--accent-color);
+            display: inline-block;
         }
 
         h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin: 0 0 0.5rem;
+            font-size: clamp(2.4rem, 6vw, 3.6rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin: 0 0 0.75rem;
         }
 
         .tagline {
             color: var(--muted-color);
             font-size: 1.05rem;
+            max-width: 40ch;
             margin: 0;
+            line-height: 1.5;
         }
 
         .catalog {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 1.25rem;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 1.1rem;
         }
 
-        .tool-card {
+        .tool-tag {
+            position: relative;
             display: block;
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
+            background-color: var(--panel-color);
+            border: 1px solid var(--line-color);
+            border-radius: 10px;
+            padding: 1.6rem 1.5rem 1.4rem;
             text-decoration: none;
             color: var(--text-color);
-            transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
         }
 
-        .tool-card:hover,
-        .tool-card:focus-visible {
-            transform: translateY(-4px);
+        .tool-tag::before {
+            content: "";
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--hole-color);
+            border: 1px solid var(--line-color);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+        }
+
+        .tool-tag::after {
+            content: "";
+            position: absolute;
+            inset: 6px;
+            border: 1px dashed var(--line-color);
+            border-radius: 6px;
+            pointer-events: none;
+            opacity: 0.6;
+            transition: border-color 0.18s ease, opacity 0.18s ease;
+        }
+
+        .tool-tag:hover,
+        .tool-tag:focus-visible {
+            transform: translateY(-3px) rotate(-0.4deg);
             border-color: var(--accent-color);
-            box-shadow: 0 8px 24px rgba(0, 112, 243, 0.2);
+            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+            outline: none;
+        }
+
+        .tool-tag:hover::after,
+        .tool-tag:focus-visible::after {
+            border-color: rgba(226, 163, 63, 0.45);
+            opacity: 1;
+        }
+
+        .tool-code {
+            font-family: "SF Mono", "Menlo", "Consolas", monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            color: var(--muted-color);
+            display: block;
+            text-align: right;
+            margin-bottom: 1.1rem;
         }
 
         .tool-icon {
-            font-size: 2rem;
+            font-size: 1.8rem;
             line-height: 1;
             display: block;
-            margin-bottom: 0.75rem;
+            margin-bottom: 0.9rem;
         }
 
         .tool-icon svg {
-            width: 2rem;
-            height: 2rem;
+            width: 1.8rem;
+            height: 1.8rem;
             display: block;
             stroke: var(--text-color);
         }
 
         .tool-name {
             font-weight: 700;
-            font-size: 1.15rem;
-            margin: 0 0 0.35rem;
+            font-size: 1.1rem;
+            margin: 0 0 0.4rem;
+            letter-spacing: -0.01em;
         }
 
         .tool-desc {
             color: var(--muted-color);
-            font-size: 0.9rem;
+            font-size: 0.87rem;
+            line-height: 1.45;
             margin: 0;
         }
 
@@ -115,11 +188,18 @@
             }
 
             main {
-                padding: 2rem 1rem 3rem;
+                padding: 3rem 1.25rem 3.5rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .tool-tag {
+                transition: none;
             }
 
-            h1 {
-                font-size: 2rem;
+            .tool-tag:hover,
+            .tool-tag:focus-visible {
+                transform: none;
             }
         }
     </style>
@@ -127,26 +207,31 @@
 <body>
     <main>
         <header>
+            <p class="eyebrow">Field kit / 6 tools issued</p>
             <h1>Scalopus</h1>
-            <p class="tagline">A catalog of quick, single-file tools.</p>
+            <p class="tagline">Small single-purpose tools, each one built to do exactly one job well. Pick one off the rack.</p>
         </header>
         <div class="catalog">
-            <a href="timer.html" class="tool-card">
+            <a href="timer.html" class="tool-tag">
+                <span class="tool-code">NO. 01</span>
                 <span class="tool-icon">⏱️</span>
                 <p class="tool-name">Countdown Timer</p>
                 <p class="tool-desc">Simple countdown timer for meetings and sessions.</p>
             </a>
-            <a href="agile-poker.html" class="tool-card">
+            <a href="agile-poker.html" class="tool-tag">
+                <span class="tool-code">NO. 02</span>
                 <span class="tool-icon">🃏</span>
                 <p class="tool-name">Agile Poker</p>
                 <p class="tool-desc">Peer-to-peer planning poker for estimation sessions.</p>
             </a>
-            <a href="wheel-of-luck.html" class="tool-card">
+            <a href="wheel-of-luck.html" class="tool-tag">
+                <span class="tool-code">NO. 03</span>
                 <span class="tool-icon">🎡</span>
                 <p class="tool-name">Wheel of Luck</p>
                 <p class="tool-desc">Spin a customizable wheel to pick a random winner.</p>
             </a>
-            <a href="qr-generator.html" class="tool-card">
+            <a href="qr-generator.html" class="tool-tag">
+                <span class="tool-code">NO. 04</span>
                 <span class="tool-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="3" width="7" height="7"></rect>
@@ -162,12 +247,14 @@
                 <p class="tool-name">QR Generator</p>
                 <p class="tool-desc">Generate QR codes instantly as you type.</p>
             </a>
-            <a href="claude-usage.html" class="tool-card">
+            <a href="claude-usage.html" class="tool-tag">
+                <span class="tool-code">NO. 05</span>
                 <span class="tool-icon">📊</span>
                 <p class="tool-name">Claude API Usage</p>
                 <p class="tool-desc">Estimate and track Claude API usage costs.</p>
             </a>
-            <a href="meetup-chat.html" class="tool-card">
+            <a href="meetup-chat.html" class="tool-tag">
+                <span class="tool-code">NO. 06</span>
                 <span class="tool-icon">💬</span>
                 <p class="tool-name">Meetup Chat</p>
                 <p class="tool-desc">Peer-to-peer chat room for live meetups.</p>
@@ -176,4 +263,3 @@
     </main>
 </body>
 </html>
-</content>
