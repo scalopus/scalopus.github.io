@@ -1,6 +1,6 @@
 <!--
     Application: Claude API Usage
-    Version: 1.1.0
+    Version: 1.1.1
     Created: 2026-06-09
     Model: Claude Sonnet 5
     Description: Visualize Claude API token usage from a CSV export — cost, token breakdown, cache hit rate, by key and model.
@@ -41,7 +41,9 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-family:-apple-
 .drop-hint{color:var(--muted);font-size:13px}
 .drop-hint strong{color:var(--bar-fill);cursor:pointer}
 .drop-hint strong:hover{text-decoration:underline}
-.drop-meta{color:var(--muted);opacity:.6;margin-top:20px;font-size:11px}
+.drop-meta{color:var(--muted);opacity:.6;margin-top:16px;font-size:11px;text-align:center}
+.drop-meta a{color:var(--bar-fill);opacity:1;text-decoration:none}
+.drop-meta a:hover{text-decoration:underline}
 #file-input{display:none}
 #drop-zone.minimized{border-bottom:1px solid var(--border);background:var(--surface);min-height:0;padding:0}
 #drop-zone.minimized .drop-card{text-align:left;background:0 0;border:none;border-radius:0;flex-direction:row;align-items:center;gap:10px;max-width:none;padding:10px 20px;display:flex}
@@ -196,9 +198,9 @@ tfoot td.col-cost{color:var(--cost)}
     <p class="drop-hint">
       Drag &amp; drop a Claude API token export, or <strong id="browse-btn">browse to select</strong>
     </p>
-    <p class="drop-meta">Export from console.anthropic.com → Usage → Export CSV</p>
     <input type="file" id="file-input" accept=".csv">
   </div>
+  <p class="drop-meta">Export from <a href="https://platform.claude.com/usage" target="_blank" rel="noopener">platform.claude.com/usage</a> → select project → Download</p>
 </div>
 
 <div id="report" hidden>
@@ -246,7 +248,7 @@ tfoot td.col-cost{color:var(--cost)}
         <span>🤖</span> AI Prompt
     </button>
     <div class="dev-label">Tool Information</div>
-    <div style="font-size:0.8rem;color:#888;padding:0 8px">Version: 1.1.0</div>
+    <div style="font-size:0.8rem;color:#888;padding:0 8px">Version: 1.1.1</div>
     <div style="font-size:0.8rem;color:#888;padding:0 8px">Created: 2026-06-09</div>
     <div style="font-size:0.8rem;color:#888;padding:0 8px">Model: Claude Sonnet 5</div>
 </div>
@@ -397,11 +399,11 @@ function copyAIPrompt() {
 
 ## Metadata
 - **Tool Name**: Claude API Usage
-- **Version**: 1.1.0
+- **Version**: 1.1.1
 - **Status**: Active
 
 ## Description
-A single-file CSV visualizer for Claude API token usage exports from console.anthropic.com. Drop in a CSV and get an interactive breakdown of cost, token consumption, and cache efficiency — by API key and model.
+A single-file CSV visualizer for Claude API token usage exports from platform.claude.com/usage. Drop in a CSV and get an interactive breakdown of cost, token consumption, and cache efficiency — by API key and model.
 
 ## Features
 - **Drag-and-drop CSV loading**: Drop or browse to load a Claude API usage export CSV.
@@ -418,7 +420,7 @@ A single-file CSV visualizer for Claude API token usage exports from console.ant
 - **CSV parsing**: Hand-rolled parser handling quoted fields.
 
 ## Future AI Prompt
-"Create a single-file HTML tool that accepts a drag-and-drop CSV export from the Anthropic console. Parse it client-side, show summary cards for cost/tokens/cache, and render a sortable table broken down by API key and model with period filtering. Include a home link at bottom-left and a developer menu at bottom-right."`;
+"Create a single-file HTML tool that accepts a drag-and-drop CSV export from platform.claude.com/usage (select project, then download). Parse it client-side, show summary cards for cost/tokens/cache, and render a sortable table broken down by API key and model with period filtering. Include a home link at bottom-left and a developer menu at bottom-right."`;
     navigator.clipboard.writeText(prompt).then(() => {
         alert('Specification copied to clipboard!');
         toggleDevMenu();
